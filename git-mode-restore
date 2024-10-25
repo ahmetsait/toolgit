@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+app_name="$(basename "${BASH_SOURCE[0]}")"
+
+USAGE=$(expand -t 4 << EOF
+Usage:
+	$app_name
+		Restore executable bits of files from index.
+
+Options:
+	-?, --help
+		Show this help information and exit.
+EOF
+)
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-\?|--help)
+			echo "$USAGE"
+			exit 0
+			;;
+		-*)
+			echo "Unknown option: $1" >&2
+			exit 1
+			;;
+		*)
+			echo "Unexpected argument: $1" >&2
+			exit 1
+			;;
+	esac
+done
+
+git in-repo || exit $?
+
+filemode="$(git config get core.fileMode)"
+if [[ "${filemode:-true}" == "true" ]]; then
+	git diff -R --no-ext-diff | grep -E "^(diff|(old|new) mode) " | git apply
+fi
