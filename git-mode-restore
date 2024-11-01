@@ -1,0 +1,744 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import argparse
+import configparser
+import hashlib
+import io
+import os
+import shlex
+import struct
+import subprocess
+from binascii import hexlify
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import *
+from hashlib import sha1, sha256
+from math import ceil
+from os.path import *
+from typing import *
+
+if TYPE_CHECKING:
+	from hashlib import _Hash
+
+
+def first_diff_index(s1: Iterable[Any], s2: Iterable[Any]) -> int:
+	"""Finds index of first difference between two sequences"""
+	i = 0
+	for a, b in zip(s1, s2):
+		if a != b:
+			return i
+		i += 1
+	return i
+
+
+def x_set(bits: int, x: bool) -> int:
+	"""Sets executable bits of file modes"""
+	return (bits & ~0o111) | (0o111 if x else 0o000)
+
+
+def x_get(bits: int) -> bool:
+	"""Extracts user executable bit from file modes"""
+	return bits & 0o100 != 0
+
+
+def format_permissions(bits: int, octal: bool) -> str:
+	"""Formats file permissions into human readable rwxrwxrwx form"""
+	if octal:
+		return format(bits, "03o")
+	
+	letters = "rwx"
+	letters_len = len(letters)
+	
+	result = ["-"] * 9
+	bits = bits & 0o777
+	i = -1
+	while bits > 0:
+		if bits & 1:
+			result[i] = letters[i % letters_len]
+		bits >>= 1
+		i -= 1
+	return "".join(result)
+
+
+@dataclass
+class GitIndexEntry:
+	ctime_sec: int = 0
+	"""32-bit Creation time in seconds, the last time a file's metadata changed"""
+	ctime_nsec: int = 0
+	"""32-bit Fractional part of creation time in nanoseconds"""
+	mtime_sec: int = 0
+	"""32-bit Modification time in seconds, the last time a file's data changed"""
+	mtime_nsec: int = 0
+	"""32-bit Fractional part of modification time in nanoseconds"""
+	
+	dev: int = 0
+	"""32-bit Device ID"""
+	ino: int = 0
+	"""32-bit File inode"""
+	
+	modes: int = 0
+	"""
+	32-bit File modes
+	├─ padding: 16-bit
+	├─ object_type: 4-bit
+	├─ unused: 3-bit
+	└─ permissions: 9-bit
+	"""
+	
+	@property
+	def object_type(self) -> int:
+		"""4-bit Type of file system object (file, dir, link, gitlink)"""
+		return (self.modes & 0xF000) >> 12
+	
+	@object_type.setter
+	def object_type(self, value: int) -> int:
+		self.modes = (self.modes & ~0xF000) | ((value & 0x000F) << 12)
+		return value
+	
+	@property
+	def permissions(self) -> int:
+		"""
+		9-bit unix permissions
+		
+		Only 0755 and 0644 are valid for regular files.
+		Symbolic links and gitlinks have value 0 in this field.
+		"""
+		return self.modes & 0o777
+	
+	@permissions.setter
+	def permissions(self, value: int) -> int:
+		self.modes = (self.modes & ~0o777) | (value & 0o777)
+		return value
+	
+	@property
+	def x(self) -> bool:
+		"""Executable bit of file"""
+		return x_get(self.modes)
+	
+	@x.setter
+	def x(self, value: bool) -> bool:
+		self.modes = x_set(self.modes, value)
+		return value
+	
+	uid: int = 0
+	"""32-bit User ID"""
+	gid: int = 0
+	"""32-bit Group ID"""
+	file_size: int = 0
+	"""32-bit File size"""
+	obj: bytes = b""
+	"""
+	Git object ID (a.k.a. hash)
+	
+	20-Bytes SHA-1 or 32-Bytes SHA-256
+	"""
+	
+	@property
+	def flags(self) -> int:
+		"""
+		16-bit Flags
+		├─ assume_unchanged: 1-bit
+		├─ extended: 1-bit
+		├─ stage: 2-bit
+		└─ path_length: 12-bit
+		"""
+		value = self.assume_unchanged << 15
+		value |= self.extended << 14
+		value |= (self.stage & 0b11) << 12
+		value |= self.path_length
+		return value
+	
+	assume_unchanged: bool = False
+	"""1-bit Assume-unchanged marker"""
+	extended: bool = False
+	"""1-bit Whether extended flags are used"""
+	stage: int = 0
+	"""2-bit Merge stage"""
+	
+	@property
+	def path_length(self) -> int:
+		"""12-bit Path length"""
+		return min(0xFFF, len(self.path))
+	
+	exflags: int = 0
+	"""
+	16-bit Extended flags
+	├─ reserved: 1-bit
+	├─ skip_worktree: 1-bit
+	├─ intent_to_add: 1-bit
+	└─ unused: 13-bit
+	"""
+	
+	@property
+	def skip_worktree(self) -> bool:
+		"""1-bit Skip-worktree marker"""
+		return self.exflags & 0x4000 != 0
+	
+	@skip_worktree.setter
+	def skip_worktree(self, value: bool) -> bool:
+		self.exflags = (self.exflags & ~0x4000) | (value << 14)
+		return value
+	
+	@property
+	def intent_to_add(self) -> bool:
+		"""1-bit Intent-to-add marker"""
+		return self.exflags & 0x2000 != 0
+	
+	@intent_to_add.setter
+	def intent_to_add(self, value: bool) -> bool:
+		self.exflags = (self.exflags & ~0x2000) | (value << 13)
+		return value
+	
+	path: str = ""
+	"""Path of index entry relative to the Git repository root"""
+
+
+@dataclass
+class GitIndexExtension:
+	signature: bytes = b""
+	"""4-Bytes Extension signature"""
+	
+	@property
+	def size(self) -> int:
+		"""32-bit Size of extension data"""
+		return len(self.data)
+	
+	data: bytes = b""
+	"""Index extension data"""
+
+
+@dataclass
+class GitIndex:
+	signature: bytes = b""
+	"""4-Bytes Index signature, must be 'DIRC'"""
+	version: int = 0
+	"""32-bits Index version, can be 2, 3 or 4"""
+	
+	@property
+	def entry_count(self) -> int:
+		"""32-bit Number of entries in the index"""
+		length = len(self.entries)
+		if length > 0xFFFF_FFFF:
+			raise GitIndexTooBigError(length)
+		return len(self.entries)
+	
+	entries: list[GitIndexEntry] = field(default_factory=lambda: [])
+	"""Index entries"""
+	extensions: list[GitIndexExtension] = field(default_factory=lambda: [])
+	"""Index extensions"""
+	checksum: bytes = b""
+	"""Index checksum, uses the same hash algorithm as Git object IDs"""
+
+
+def read_index(f: BinaryIO, hasher: "_Hash") -> GitIndex:
+	"""Reads and validates Git index from the given binary stream"""
+	hasher = hashlib.new(hasher.name)
+	
+	fmt = "!4sII"
+	size = struct.calcsize(fmt)
+	data = f.read(size)
+	hasher.update(data)
+	pack = struct.unpack(fmt, data)
+	index = GitIndex()
+	index.signature = pack[0]
+	index.version = pack[1]
+	entry_count: int = pack[2]
+	index.entries = list[GitIndexEntry]()
+	index.extensions = list[GitIndexExtension]()
+	
+	last_path = ""
+	for i in range(entry_count):
+		fmt = f"!10I{hasher.digest_size}sH"
+		size = struct.calcsize(fmt)
+		data = f.read(size)
+		hasher.update(data)
+		pack = struct.unpack(fmt, data)
+		
+		entry = GitIndexEntry()
+		entry.ctime_sec = pack[0]
+		entry.ctime_nsec = pack[1]
+		entry.mtime_sec = pack[2]
+		entry.mtime_nsec = pack[3]
+		entry.dev = pack[4]
+		entry.ino = pack[5]
+		
+		entry.modes = pack[6]
+		
+		entry.uid = pack[7]
+		entry.gid = pack[8]
+		entry.file_size = pack[9]
+		entry.obj = pack[10]
+		
+		flags: int = pack[11]
+		entry.assume_unchanged = bool(flags & 0x8000)
+		entry.extended = bool(flags & 0x4000)
+		entry.stage = (flags & 0x3000) >> 12
+		entry_path_length = flags & 0xFFF
+		extended = entry.extended and index.version >= 3
+		
+		entrylen = size
+		
+		if extended:
+			fmt = "!H"
+			size = struct.calcsize(fmt)
+			data = f.read(size)
+			hasher.update(data)
+			entry.exflags = struct.unpack(fmt, data)[0]
+			entrylen += size
+		
+		prefix = 0
+		if index.version == 4:
+			while True:
+				data = f.read(1)
+				hasher.update(data)
+				bits = data[0]
+				prefix |= bits & 0x7F
+				if not (bits & 0x80):
+					break
+				prefix <<= 7
+				entrylen += 1
+		
+		if index.version == 4:
+			entry_path_length -= len(last_path) - prefix
+		
+		if entry_path_length < 0xFFF:
+			data = f.read(entry_path_length)
+			hasher.update(data)
+			entry.path = last_path[:-prefix] + data.decode()
+			hasher.update(f.read(1)) # NULL terminator
+			entrylen += entry_path_length + 1
+		else:
+			buf = bytearray()
+			while True:
+				data = f.read(1)
+				hasher.update(data)
+				ch = data[0]
+				if ch == 0: # NULL terminator
+					break
+				buf.append(ch)
+			entry.path = last_path[:-prefix] + buf.decode()
+			entrylen += len(buf) + 1 # \0
+		
+		if index.version == 4:
+			padding = 0
+		else:
+			padding = (8 - entrylen % 8) % 8
+		
+		hasher.update(f.read(padding))
+		
+		index.entries.append(entry)
+		last_path = entry.path
+	
+	rest = f.read()
+	f = io.BytesIO(rest)
+	
+	i = 0
+	while f.tell() < len(rest) - hasher.digest_size:
+		fmt = "!4sI"
+		size = struct.calcsize(fmt)
+		data = f.read(size)
+		hasher.update(data)
+		pack = struct.unpack(fmt, data)
+		ext = GitIndexExtension()
+		ext.signature = pack[0]
+		ext_size = pack[1]
+		ext.data = f.read(ext_size)
+		hasher.update(ext.data)
+		index.extensions.append(ext)
+		i += 1
+	
+	index.checksum = f.read(hasher.digest_size)
+	
+	if index.checksum != hasher.digest():
+		raise GitIndexCorruptedError(hasher.hexdigest(), hexlify(index.checksum).decode())
+	
+	return index
+
+
+def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
+	"""Writes Git index to the given binary stream, returns calculated checksum"""
+	hasher = hashlib.new(hasher.name)
+	
+	data = struct.pack("!4sII",
+		index.signature,
+		index.version,
+		len(index.entries),
+	)
+	f.write(data)
+	hasher.update(data)
+	
+	last_path = ""
+	for entry in index.entries:
+		entrylen = 0
+		
+		flags = entry.assume_unchanged << 15
+		flags |= entry.extended << 14
+		flags |= (entry.stage & 0x3) << 12
+		path_length = len(entry.path)
+		flags |= path_length if path_length < 0xFFF else 0xFFF
+		
+		data = struct.pack(f"!10I{hasher.digest_size}sH",
+			entry.ctime_sec,
+			entry.ctime_nsec,
+			entry.mtime_sec,
+			entry.mtime_nsec,
+			entry.dev,
+			entry.ino,
+			entry.modes,
+			entry.uid,
+			entry.gid,
+			entry.file_size,
+			entry.obj,
+			flags,
+		)
+		entrylen += f.write(data)
+		hasher.update(data)
+		
+		if entry.extended:
+			data = struct.pack("!H", entry.exflags)
+			entrylen += f.write(data)
+			hasher.update(data)
+		
+		entry_path = entry.path
+		if index.version == 4:
+			diff_index = first_diff_index(last_path, entry.path)
+			entry_path = entry.path[diff_index:]
+			prefix = len(last_path) - diff_index
+			marked_bytes = prefix.bit_length() // 7
+			for i in range(marked_bytes):
+				bits = prefix >> 7 * (marked_bytes - 1 - i) & 0x7F | 0x80
+				data = struct.pack("!B", bits)
+				entrylen += f.write(data)
+				hasher.update(data)
+			bits = prefix & 0x7F
+			data = struct.pack("!B", bits)
+			entrylen += f.write(data)
+			hasher.update(data)
+		
+		entrylen += f.write(entry_path.encode())
+		hasher.update(entry_path.encode())
+		entrylen += f.write(b"\0")
+		hasher.update(b"\0")
+		
+		if index.version == 4:
+			padding = b""
+		else:
+			padding = b"\0" * ((8 - entrylen % 8) % 8)
+		
+		entrylen += f.write(padding)
+		hasher.update(padding)
+		
+		last_path = entry.path
+	
+	for ext in index.extensions:
+		data = struct.pack("!4sI", ext.signature, ext.size)
+		f.write(data)
+		hasher.update(data)
+		f.write(ext.data)
+		hasher.update(ext.data)
+	
+	checksum: bytes = hasher.digest()
+	f.write(checksum)
+	return checksum
+
+
+def chomp(s: str) -> str:
+	"""Removes final newline from the given string"""
+	if s.endswith("\r\n"):
+		return s[:-2]
+	if s.endswith("\n"):
+		return s[:-1]
+	else:
+		return s
+
+
+def str2bool(s: str) -> Optional[bool]:
+	"""Converts a true/false yes/no string to boolean"""
+	s = s.casefold()
+	if s == "true":
+		return True
+	if s == "false":
+		return False
+	if s == "yes":
+		return True
+	if s == "no":
+		return False
+	if len(s) == 0:
+		return False
+	
+	return int(s) != 0
+
+
+class GitError(Exception):
+	pass
+
+
+class GitNotARepositoryError(GitError):
+	def __init__(self, path: str, mount_point: Optional[str] = None):
+		if mount_point is None:
+			super().__init__(f"Not a Git repository (or any of the parent directories): {shlex.quote(path)}")
+		else:
+			super().__init__(f"Not a Git repository (or any parent up to mount point {shlex.quote(mount_point)}): {shlex.quote(path)}")
+		self.path = path
+		self.mount_point = mount_point
+
+
+class GitInvalidObjectFormatError(GitError):
+	def __init__(self, object_format: str):
+		super().__init__(f"Invalid value for 'extensions.objectformat': {shlex.quote(object_format)}")
+		self.object_format = object_format
+
+
+class GitInvalidRepositoryFormatVersionError(GitError):
+	def __init__(self, repository_format_version: int):
+		super().__init__(f"Expected Git repository version <= 1, found {repository_format_version}")
+		self.repository_format_version = repository_format_version
+
+
+class GitBadBooleanEnvironmentValueError(GitError):
+	def __init__(self, value: str, variable: str):
+		super().__init__(f"Bad boolean environment value {shlex.quote(value)} for {shlex.quote(variable)}")
+		self.value = value
+
+
+class GitIndexTooBigError(GitError):
+	def __init__(self, entry_count: int):
+		super().__init__("Too many index entries: {entry_count} > {0xFFFFFFFF}")
+		self.entry_count = entry_count
+
+
+class GitIndexNotInitializedError(GitError):
+	def __init__(self, root: str):
+		super().__init__(f"Git index not initialized yet for {shlex.quote(root)}")
+		self.root = root
+
+
+class GitIndexCorruptedError(GitError):
+	def __init__(self, calculated: str, found: str):
+		super().__init__(f"Git index corrupted: Calculated {calculated} but found {found}")
+		self.calculated = calculated
+		self.found = found
+
+
+def get_repo_root(path: str = ".") -> str:
+	"""Finds Git repository root by searching the path upwards"""
+	git_discovery_across_filesystem = os.environ.get("GIT_DISCOVERY_ACROSS_FILESYSTEM", "false")
+	try:
+		across_fs = str2bool(git_discovery_across_filesystem)
+	except ValueError:
+		raise GitBadBooleanEnvironmentValueError(git_discovery_across_filesystem, "GIT_DISCOVERY_ACROSS_FILESYSTEM")
+	
+	path = abspath(path)
+	current = path
+	dev = os.lstat(current).st_dev
+	while True:
+		if isdir(join(current, ".git")):
+			return current
+		parent = dirname(current)
+		if len(parent) == 0 or current == parent or samefile(current, parent):
+			raise GitNotARepositoryError(path)
+		if not across_fs and os.lstat(parent).st_dev != dev:
+			raise GitNotARepositoryError(path, parent)
+		current = parent
+
+
+def get_repo_object_hasher(repo_path: str = ".") -> "_Hash":
+	"""Returns a hashlib algorithm instance appropriate for generating Git object IDs of given repository"""
+	git_config = configparser.ConfigParser(strict=False)
+	git_config.read(join(repo_path, ".git", "config"))
+	repo_version = int(git_config.get("core", "repositoryformatversion", fallback="0"))
+	
+	if repo_version == 0:
+		return sha1()
+	if repo_version == 1:
+		object_format = git_config.get("extensions", "objectformat", fallback="sha1")
+		return hashlib.new(object_format)
+	else:
+		raise GitInvalidRepositoryFormatVersionError(repo_version)
+
+
+class OpenMode(IntEnum):
+	READ = auto()
+	WRITE = auto()
+
+def open_repo_index(repo_path: str = ".", mode: OpenMode = OpenMode.READ) -> BinaryIO:
+	"""Open the Git index file of given repository as a binary stream"""
+	index_path = join(repo_path, ".git", "index")
+	try:
+		if mode == OpenMode.READ:
+			return open(index_path, "rb")
+		elif mode == OpenMode.WRITE:
+			return open(index_path, "wb")
+		else:
+			raise ValueError(f"Invalid 'mode' value: {mode}")
+	except FileNotFoundError:
+		raise GitIndexNotInitializedError(repo_path)
+
+
+def main(args: list[str]) -> int:
+	parser = argparse.ArgumentParser(add_help=False, description="Restore file modes in index and/or worktree.")
+	parser.add_argument("path", nargs="+")
+	parser.add_argument(
+		"-s", "--source",
+		metavar="<tree-ish>",
+		help="Restore file modes from the given tree. If not specified, the modes are restored from HEAD if --staged is given, otherwise from the index.",
+	)
+	parser.add_argument(
+		"-W", "--worktree",
+		action="store_true",
+		default=False,
+		help="The working tree modes are restored. This is the default.",
+	)
+	parser.add_argument(
+		"-S", "--staged",
+		action="store_true",
+		default=False,
+		help="File modes in the index are restored. Specifying both --worktree and --staged restores both index and worktree.",
+	)
+	parser.add_argument(
+		"-8", "--octal",
+		action="store_true",
+		default=False,
+		help="Print permissions in octal based numeric format instead of using 'rwx' letters.",
+	)
+	parser.add_argument(
+		"-n", "--dry-run",
+		action="store_true",
+		default=False,
+		help="Don’t actually restore file modes, just show what would happen.",
+	)
+	parser.add_argument(
+		"-q", "--quiet",
+		action="store_true",
+		default=False,
+		help="Suppress printing file permission changes to standard output.",
+	)
+	parser.add_argument(
+		"-?", "--help",
+		action="help",
+		help="Show this help text and exit.",
+	)
+	argv = parser.parse_args(args)
+	
+	cwd = realpath(abspath(os.getcwd()))
+	repo_root = realpath(get_repo_root(cwd))
+	
+	class PathTuple(NamedTuple):
+		path_orig: str
+		path: str
+	
+	path_tuples = [PathTuple(p, realpath(abspath(p))) for p in argv.path]
+	paths = [tp.path for tp in path_tuples]
+	restore_staged: bool = argv.staged
+	restore_worktree: bool = argv.worktree or not restore_staged
+	source: Optional[str] = "HEAD" if restore_staged and argv.source is None else argv.source
+	octal: bool = argv.octal
+	dry_run: bool = argv.dry_run
+	quiet: bool = argv.quiet
+	
+	outside = False
+	for path_orig, path in path_tuples:
+		if commonpath([repo_root, path]) != repo_root:
+			print(f"{parser.prog}: Path {shlex.quote(path_orig)} points to outside of the repository {shlex.quote(repo_root)}", file=sys.stderr)
+			outside = True
+	if outside:
+		return 1
+	
+	git_config = subprocess.run(shlex.split("git config get core.ignoreCase"), capture_output=True, encoding="utf-8")
+	check_process(git_config)
+	ignore_case = str2bool(chomp(git_config.stdout))
+	
+	hasher = get_repo_object_hasher(repo_root)
+	
+	if restore_staged or source is None:
+		with open_repo_index(repo_root) as index_io:
+			index = read_index(index_io, hasher)
+			index_map = { (entry.path.casefold() if ignore_case else entry.path): entry for entry in index.entries }
+	
+	class FileInfo(NamedTuple):
+		x: bool
+		path: str
+		"""Path relative to repository root"""
+		path_abs: str
+		"""Absolute path"""
+		path_rel: str
+		"""Path relative to current working directory"""
+	
+	if source is None:
+		source_files = [
+			FileInfo(
+				entry.x,
+				entry.path,
+				path_abs,
+				relpath(path_abs, cwd)
+			)
+			for entry, path_abs in ((entry, join(repo_root, entry.path)) for entry in index.entries)
+		]
+	else:
+		ls = subprocess.run(shlex.split(f"git ls-tree -z -r --full-tree --format='%(objectmode)\t%(path)' {source} --") + paths, capture_output=True, encoding="utf-8")
+		check_process(ls)
+		lines = (line for line in ls.stdout.split("\0") if len(line) > 0)
+		source_files = [
+			FileInfo(
+				x_get(int(modes[-3:], base=8)),
+				path,
+				path_abs,
+				relpath(path_abs, cwd)
+			)
+			for modes, path, path_abs in ((line[0], line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines))
+		]
+	
+	if restore_staged:
+		index_changed = False
+		for source_file in source_files:
+			if not any(path for path in paths if commonpath([source_file.path_abs, path]) == path):
+				continue
+			source_path = (source_file.path.casefold() if ignore_case else source_file.path)
+			if not source_path in index_map:
+				continue
+			entry = index_map[source_path]
+			if entry.x != source_file.x:
+				new_perms = x_set(entry.permissions, source_file.x)
+				if not quiet:
+					print(f"{format_permissions(entry.permissions, octal)} -> {format_permissions(new_perms, octal)}: [index] {shlex.quote(source_file.path_rel)}")
+				if not dry_run:
+					entry.permissions = new_perms
+					index_changed = True
+		if index_changed and not dry_run:
+			with open_repo_index(repo_root, OpenMode.WRITE) as index_io:
+				write_index(index_io, index, hasher)
+	
+	if restore_worktree:
+		for source_file in source_files:
+			if not any(path for path in paths if commonpath([source_file.path_abs, path]) == path):
+				continue
+			if not isfile(source_file.path_abs):
+				continue
+			file_modes = os.lstat(source_file.path_abs).st_mode
+			file_perms = file_modes & 0o777
+			file_x = x_get(file_perms)
+			if file_x != source_file.x:
+				new_modes = x_set(file_modes, source_file.x)
+				new_perms = new_modes & 0o777
+				if not quiet:
+					print(f"{format_permissions(file_perms, octal)} -> {format_permissions(new_perms, octal)}: {shlex.quote(source_file.path_rel)}")
+				if not dry_run:
+					os.chmod(source_file.path_abs, new_modes, follow_symlinks=False)
+	
+	return 0
+
+
+def check_process(proc: subprocess.CompletedProcess[str]) -> None:
+	if proc.returncode != 0:
+		print(chomp(proc.stderr), file=sys.stderr)
+		sys.exit(proc.returncode)
+
+
+if __name__ == "__main__":
+	import sys
+	try:
+		sys.exit(main(sys.argv[1:]))
+	except GitError as ex:
+		print(ex, file=sys.stderr)
+		sys.exit(1)

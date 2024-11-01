@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+
+app_name="$(basename "${BASH_SOURCE[0]}")"
+
+USAGE=$(expand -t 4 << EOF
+Usage:
+    $app_name
+        Search history for string only in added or removed lines.
+
+Options:
+    -t, --diff-type=<A|R|Added|Removed>
+        Whether to search in added or removed lines.
+
+    -l, --log-opt=<LOG_OPTIONS>
+        Options to pass on to git log commands.
+
+    -d, --diff-opt=<DIFF_OPTIONS>
+        Options to pass on to git diff commands.
+
+    --help
+        Show this help information and exit.
+EOF
+)
+
+getopt -q -T
+if [[ $? -ne 4 ]]; then
+    echo "$app_name: This script requires an enhanced getopt version." >&2
+    exit 1
+fi
+
+opts=$(getopt -o 't:l:d:' --long 'help,diff-type:,log-opt:,diff-opt:' -n "$app_name" -- "$@") || exit $?
+
+eval "opts=($opts)"
+
+for ((i=0; i < ${#opts[@]}; i++)); do
+    opt="${opts[$i]}"
+    case "$opt" in
+        --help)
+            echo "$USAGE"
+            exit 0
+            ;;
+        -t|--diff-type)
+            diff_type="${opts[++i]}"
+            ;;
+        -l|--log-opt)
+            log_opt="${opts[++i]}"
+            ;;
+        -d|--diff-opt)
+            diff_opt="${opts[++i]}"
+            ;;
+        --)
+            break
+            ;;
+        *)
+            echo 'Internal error!' >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ ! -v diff_type ]]; then
+    echo "$app_name: Missing '--diff-type' argument." >&2
+    exit 1
+elif [[ -z $diff_type ]]; then
+    echo "$app_name: Missing value for argument '--diff-type'." >&2
+    exit 1
+elif [[ ${diff_type@U} == 'A' || ${diff_type@U} == "ADDED" ]]; then
+    diff_mark='>'
+elif [[ ${diff_type@U} == 'R' || ${diff_type@U} == "REMOVED" ]]; then
+    diff_mark='<'
+else
+    echo "$app_name: Unrecognized diff-type: '$diff_type'. Accepted values: 'A', 'Added', 'R', 'Removed'." >&2
+    exit 1
+fi
+
+if [[ ! -v log_opt ]]; then
+    echo "$app_name: Missing '--log-opt' argument." >&2
+    exit 1
+elif [[ -z $log_opt ]]; then
+    echo "$app_name: Missing value for argument '--log-opt'." >&2
+    exit 1
+fi
+
+opts=$(eval getopt -q -o 'S:G:' -n "$app_name" -- "$log_opt")
+
+eval "opts=($opts)"
+
+for ((i=0; i < ${#opts[@]}; i++)); do
+    opt="${opts[$i]}"
+    case "$opt" in
+        -S)
+            search_text="${opts[++i]}"
+            ;;
+        -G)
+            search_regex="${opts[++i]}"
+            ;;
+        --)
+            break
+            ;;
+        *)
+            echo 'Internal error!' >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ ! -v search_text && ! -v search_regex ]]; then
+    echo "$app_name: No '-S' or '-G' found in log options." >&2
+    exit 1
+elif [[ -z $search_text && -z $search_regex ]]; then
+    echo "$app_name: Missing value for argument '-S' or '-G' in log options." >&2
+    exit 1
+fi
+
+interrupt () {
+    echo "$app_name: Interrupted." >&2
+    exit 1
+}
+
+trap interrupt INT
+
+if [[ -t 1 ]]; then 
+    git_color="--color"
+    less_color="-r"
+fi
+
+if [[ -n $search_regex ]]; then
+    grep_opt='-E "$search_regex"'
+elif [[ -n $search_text ]]; then
+    grep_opt='"$search_text"'
+fi
+
+set -e
+
+eval git --no-pager log "$log_opt" --no-patch --format=%H |
+while read -r sha; do
+    eval git --no-pager diff -U0 "$sha~" "$sha" --output-indicator-new='\>' --output-indicator-old='\<' |
+    grep -E "^$diff_mark" |
+    eval grep -q "$grep_opt" &&
+    eval git --no-pager log "$git_color" --no-walk "$sha" "$log_opt" "$diff_opt"
+done | less -deFX $less_color

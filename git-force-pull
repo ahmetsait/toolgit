@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+app_name="$(basename "${BASH_SOURCE[0]}")"
+
+USAGE=$(expand -t 4 << EOF
+Usage:
+	$app_name [--all]
+		Fetch and force pull remote tracking branch(es) by doing a hard reset.
+
+Options:
+	--all
+		Force pull all branches instead of just the currently checked out one.
+
+	-?, --help
+		Show this help information and exit.
+EOF
+)
+
+all=0
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--all)
+			all=1
+			shift
+			;;
+		-\?|--help)
+			echo "$USAGE"
+			exit 0
+			;;
+		-*)
+			echo "Unknown option: $1" >&2
+			exit 1
+			;;
+		*)
+			echo "Unexpected argument: $1" >&2
+			exit 1
+			;;
+	esac
+done
+
+force_pull() {
+	local branch_full_name="$1"
+	local branch="${branch_full_name#refs/heads/}"
+	local upstream="$(git rev-parse --quiet --verify --abbrev-ref "$branch@{upstream}")"
+	local has_upstream=$?
+	if [[ has_upstream -eq 0 ]]; then
+		if git merge-base --is-ancestor "$upstream" "$branch"; then
+			echo "'$branch' is already up to date with '${upstream%/$branch}'."
+		else
+			branch_sha_short="$(git rev-parse --quiet --short --verify "$branch")" &&
+			upstream_sha_short="$(git rev-parse --quiet --short --verify "$upstream")" &&
+			echo git update-ref "$branch_full_name" "$upstream" &&
+			echo "Update '$branch' ("$branch_sha_short") to '$upstream' ("$upstream_sha_short"): $(git show --no-patch --format="%s" "$upstream")"
+		fi
+	fi
+}
+
+git fetch --all &&
+if [[ all -eq 1 ]]; then
+	for branch_full_name in $(git for-each-ref --format='%(refname)' refs/heads); do
+		force_pull "$branch_full_name"
+	done
+else
+	current_branch_full_name="$(git symbolic-ref --quiet HEAD)"
+	is_head_attached=$?
+	if [[ is_head_attached -eq 0 ]]; then
+		force_pull "$current_branch_full_name"
+	fi
+fi

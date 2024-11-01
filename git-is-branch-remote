@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+app_name="$(basename "${BASH_SOURCE[0]}")"
+
+USAGE=$(expand -t 4 << EOF
+Usage:
+	$app_name <BRANCH...>
+		Returns 0 if the branch(es) refer to a remote branch.
+
+Options:
+	-?, --help
+		Show this help information and exit.
+EOF
+)
+
+args=()
+
+for ((i = 1; i <= $#; i++)); do
+	opt="${!i}"
+	case "$opt" in
+		-\?|--help)
+			echo "$USAGE"
+			exit 0
+			;;
+		--)
+			args+=("${@:i+1}")
+			break
+			;;
+		-*)
+			echo "Unknown option: $1" >&2
+			exit 1
+			;;
+		*)
+			args+=("$opt")
+			;;
+	esac
+done
+
+if [[ ${#args} -eq 0 ]]; then
+	echo "$app_name: No branch is given." >&2
+	echo "Try '$app_name -?' for more information." >&2
+	exit 2
+fi
+
+git in-repo &&
+for arg in "${args[@]}"; do
+	[[ "$(git rev-parse --quiet --verify --symbolic-full-name "$arg")" == refs/remotes/* ]] || exit 1
+done

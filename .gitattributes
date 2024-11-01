@@ -1,0 +1,263 @@
+*   text=auto
+
+# Source code
+*.ada       text  diff=ada
+*.bash      text  diff=bash      eol=lf
+*.bat       text                 eol=crlf
+*.bib       text  diff=bibtex
+*.c         text
+*.cc        text  diff=cpp
+*.cginc     text
+*.cmd       text                 eol=crlf
+*.coffee    text
+*.cpp       text  diff=cpp
+*.cs        text  diff=csharp
+*.css       text  diff=css
+*.cxx       text  diff=cpp
+*.dts       text  diff=dts
+*.ex        text  diff=elixir
+*.f         text  diff=fortran
+*.f03       text  diff=fortran
+*.f90       text  diff=fortran
+*.f95       text  diff=fortran
+*.for       text  diff=fortran
+*.fountain  text  diff=fountain
+*.glsl      text
+*.go        text  diff=golang
+*.hlsl      text
+*.htm       text  diff=html
+*.html      text  diff=html
+*.inc       text
+*.ini       text
+*.java      text  diff=java
+*.js        text
+*.json      text
+*.jsx       text
+*.kt        text  diff=kotlin
+*.less      text
+*.ls        text
+*.m         text  diff=matlab
+*.map       text  -diff
+*.mm        text  diff=objc
+*.od        text
+*.onlydata  text
+*.pas       text  diff=pascal
+*.php       text  diff=php
+*.pl        text  diff=perl
+*.pp        text  diff=pascal
+*.ps1       text
+*.py        text  diff=python
+*.rb        text  diff=ruby
+*.rs        text  diff=rust
+*.sass      text
+*.scm       text  diff=scheme
+*.scss      text  diff=css
+*.sh        text  diff=bash      eol=lf
+*.shader    text
+*.spmd      text  diff=fountain
+*.sql       text
+*.styl      text
+*.tag       text
+*.tex       text  diff=tex
+*.ts        text
+*.tsx       text
+*.xhtml     text  diff=html
+*.xml       text
+
+# Docker
+Dockerfile  text
+
+# Documentation
+*.ipynb       text
+*.markdown    text  diff=markdown
+*.md          text  diff=markdown
+*.mdwn        text  diff=markdown
+*.mdown       text  diff=markdown
+*.mkd         text  diff=markdown
+*.mkdn        text  diff=markdown
+*.mdtxt       text  diff=markdown
+*.mdtext      text  diff=markdown
+*.txt         text
+AUTHORS       text
+CHANGELOG     text
+CHANGES       text
+CONTRIBUTING  text
+COPYING       text
+copyright     text
+COPYRIGHT     text
+INSTALL       text
+license       text
+LICENSE       text
+NEWS          text
+readme        text
+README        text
+todo          text
+TODO          text
+
+# Templates
+*.dot         text
+*.ejs         text
+*.erb         text
+*.haml        text
+*.handlebars  text
+*.hbs         text
+*.hbt         text
+*.jade        text
+*.latte       text
+*.mustache    text
+*.njk         text
+*.phtml       text
+*.svelte      text
+*.tmpl        text
+*.tpl         text
+*.twig        text
+*.vue         text
+
+# Configs
+*.cnf              text
+*.conf             text
+*.config           text
+.editorconfig      text
+.env               text
+.gitattributes     text
+.gitconfig         text
+.htaccess          text
+*.lock             text
+package.json       text  eol=lf
+package-lock.json  text
+pnpm-lock.yaml     text  eol=lf
+.prettierrc        text
+yarn.lock          text
+*.toml             text
+*.yaml             text
+*.yml              text
+browserslist       text
+Makefile           text
+makefile           text
+
+# RC files (like .babelrc or .eslintrc)
+*.*rc  text
+
+# Ignore files (like .npmignore or .gitignore)
+*.*ignore  text
+
+*.3dm         binary
+*.3ds         binary
+*.3gp         binary
+*.3gpp        binary
+*.7z          binary
+*.abc         text=auto
+*.afdesign    binary
+*.afphoto     binary
+*.ai          binary
+*.aif         binary
+*.aiff        binary
+*.apk         binary
+*.apng        binary
+*.asf         binary
+*.asx         binary
+*.avi         binary
+*.bin         binary
+*.blend       binary
+*.bmp         binary
+*.bz2         binary
+*.c4d         binary
+*.clip        binary
+*.dae         text
+*.dds         binary
+*.dfx         binary
+*.dll         binary
+*.dxf         binary
+*.eot         binary
+*.eps         binary
+*.exe         binary
+*.exr         binary
+*.fbx         text=auto
+*.FBX         text=auto
+*.fla         binary
+*.flv         binary
+*.gif         binary
+*.gifv        binary
+*.glb         binary
+*.gltf        text
+*.gz          binary
+*.hdr         binary
+*.ico         binary
+*.iff         binary
+*.it          binary
+*.jar         binary
+*.jas         binary
+*.jng         binary
+*.jp2         binary
+*.jpeg        binary
+*.jpg         binary
+*.jpx         binary
+*.jxr         binary
+*.kar         binary
+*.kpp         binary
+*.kra         binary
+*.lwo         binary
+*.lwo2        binary
+*.lws         binary
+*.lxo         binary
+*.m4a         binary
+*.m4v         binary
+*.ma          text
+*.max         binary
+*.mb          binary
+*.mdb         binary
+*.mdd         binary
+*.mid         binary
+*.midi        binary
+*.mng         binary
+*.mod         text=auto
+*.mov         binary
+*.mp3         binary
+*.mp4         binary
+*.mpeg        binary
+*.mpg         binary
+*.o           binary
+*.obj         text=auto
+*.ogg         binary
+*.ogv         binary
+*.otf         binary
+*.pdb         binary
+*.pdf         binary
+*.pict        binary
+*.ply         text=auto
+*.png         binary
+*.psb         binary
+*.psd         binary
+*.pyc         binary
+*.ra          binary
+*.rar         binary
+*.rns         binary
+*.s3m         binary
+*.skel        text
+*.skel.bytes  binary
+*.skp         binary
+*.so          binary
+*.stl         text=auto
+*.svg         text
+*.svgz        binary
+*.swc         binary
+*.swf         binary
+*.tar         binary
+*.tga         binary
+*.tif         binary
+*.tiff        binary
+*.ttf         binary
+*.usd         text=auto
+*.usda        text
+*.usdc        binary
+*.wav         binary
+*.wbmp        binary
+*.webm        binary
+*.webp        binary
+*.wmv         binary
+*.woff        binary
+*.woff2       binary
+*.xcf         binary
+*.xm          binary
+*.zip         binary
+*.ztl         binary

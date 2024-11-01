@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+app_name="$(basename "${BASH_SOURCE[0]}")"
+
+USAGE=$(expand -t 4 << EOF
+Usage:
+	$app_name [--force]
+		Expire the reflog and run a full garbage collection on the Git repository.
+
+Options:
+	-f, --force
+		Disable safety checks.
+
+	-?, --help
+		Show this help information and exit.
+EOF
+)
+
+force=0
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-f|--force)
+			force=1
+			shift
+			;;
+		-\?|--help)
+			echo "$USAGE"
+			exit 0
+			;;
+		-*)
+			echo "Unknown option: $1" >&2
+			exit 1
+			;;
+		*)
+			echo "Unexpected argument: $1" >&2
+			exit 1
+			;;
+	esac
+done
+
+git in-repo || exit $?
+
+git -c gc.reflogExpire=0 -c gc.reflogExpireUnreachable=0 -c gc.rerereresolved=0 -c gc.rerereunresolved=0 -c gc.pruneExpire=now gc

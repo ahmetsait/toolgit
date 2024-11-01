@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+app_name="$(basename "${BASH_SOURCE[0]}")"
+
+USAGE=$(expand -t 4 << EOF
+Usage:
+	$app_name
+		Fetch and fast forward all remote tracking branches.
+
+Options:
+	-?, --help
+		Show this help information and exit.
+EOF
+)
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-\?|--help)
+			echo "$USAGE"
+			exit 0
+			;;
+		-*)
+			echo "Unknown option: $1" >&2
+			exit 1
+			;;
+		*)
+			echo "Unexpected argument: $1" >&2
+			exit 1
+			;;
+	esac
+done
+
+git in-repo || exit $?
+
+interrupt () {
+	echo "Interrupted."
+	exit 1
+}
+
+trap interrupt INT
+
+git fetch --all &&
+current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
+for branch in $(git branch --list --format="%(refname:short)"); do
+	upstream="$(git rev-parse --verify --quiet --abbrev-ref "$branch@{upstream}")"
+	has_upstream="$?"
+	if [[ has_upstream -eq 0 ]]; then
+		branch_sha="$(git rev-parse --quiet --verify "$branch")" &&
+		upstream_sha="$(git rev-parse --quiet --verify "$upstream")" &&
+		if git merge-base --is-ancestor "$upstream_sha" "$branch_sha"; then
+			echo "'$branch' is already up to date with '${upstream%/$branch}'."
+			continue
+		fi
+		if [[ "$branch" == "$current_branch" ]]; then
+			git pull --ff-only --quiet
+		else
+			git fetch . --quiet "$upstream:$branch"
+		fi &&
+		echo "Updated '$branch' -> '$upstream'" ||
+		echo "Cannot fast forward '$branch' to '$upstream'"
+	fi
+done
