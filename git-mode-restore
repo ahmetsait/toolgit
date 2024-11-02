@@ -30,14 +30,14 @@ def first_diff_index(s1: Iterable[Any], s2: Iterable[Any]) -> int:
 	return i
 
 
-def set_x(bits: int, x: bool) -> int:
-	"""Sets executable bits of file modes"""
-	return (bits & ~0o111) | (0o111 if x else 0o000)
-
-
 def get_x(bits: int) -> bool:
 	"""Extracts user executable bit from file modes"""
 	return bits & 0o100 != 0
+
+
+def set_x(bits: int, x: bool) -> int:
+	"""Sets executable bits of file modes"""
+	return (bits & ~0o111) | (0o111 if x else 0o000)
 
 
 def format_permissions(bits: int, octal: bool) -> str:
@@ -57,6 +57,33 @@ def format_permissions(bits: int, octal: bool) -> str:
 		bits >>= 1
 		i -= 1
 	return "".join(result)
+
+
+def chomp(s: str) -> str:
+	"""Removes final newline from the given string"""
+	if s.endswith("\r\n"):
+		return s[:-2]
+	if s.endswith("\n"):
+		return s[:-1]
+	else:
+		return s
+
+
+def str2bool(s: str) -> bool:
+	"""Converts a true/false yes/no string to boolean"""
+	s = s.casefold()
+	if s == "true":
+		return True
+	if s == "false":
+		return False
+	if s == "yes":
+		return True
+	if s == "no":
+		return False
+	if len(s) == 0:
+		return False
+	
+	return int(s) != 0
 
 
 @dataclass
@@ -438,33 +465,6 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 	checksum: bytes = hasher.digest()
 	f.write(checksum)
 	return checksum
-
-
-def chomp(s: str) -> str:
-	"""Removes final newline from the given string"""
-	if s.endswith("\r\n"):
-		return s[:-2]
-	if s.endswith("\n"):
-		return s[:-1]
-	else:
-		return s
-
-
-def str2bool(s: str) -> Optional[bool]:
-	"""Converts a true/false yes/no string to boolean"""
-	s = s.casefold()
-	if s == "true":
-		return True
-	if s == "false":
-		return False
-	if s == "yes":
-		return True
-	if s == "no":
-		return False
-	if len(s) == 0:
-		return False
-	
-	return int(s) != 0
 
 
 class GitError(Exception):
