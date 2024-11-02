@@ -30,6 +30,26 @@ def first_diff_index(s1: Iterable[Any], s2: Iterable[Any]) -> int:
 	return i
 
 
+def get_object_type(bits: int) -> int:
+	"""Extracts object type from file mode bits"""
+	return (bits & 0xF000) >> 12
+
+
+def set_object_type(bits: int, value: int) -> int:
+	"""Sets object type in file mode bits"""
+	return (bits & ~0xF000) | ((value & 0x000F) << 12)
+
+
+def get_permissions(bits: int) -> int:
+	"""Extracts permissions from file mode bits"""
+	return bits & 0o777
+
+
+def set_permissions(bits: int, value: int) -> int:
+	"""Sets permissions in file mode bits"""
+	return (bits & ~0o777) | (value & 0o777)
+
+
 def get_x(bits: int) -> bool:
 	"""Extracts user executable bit from file modes"""
 	return bits & 0o100 != 0
@@ -49,7 +69,7 @@ def format_permissions(bits: int, octal: bool) -> str:
 	letters_len = len(letters)
 	
 	result = ["-"] * 9
-	bits = bits & 0o777
+	bits = get_permissions(bits)
 	i = -1
 	while bits > 0:
 		if bits & 1:
@@ -114,11 +134,11 @@ class GitIndexEntry:
 	@property
 	def object_type(self) -> int:
 		"""4-bit Type of file system object (file, dir, link, gitlink)"""
-		return (self.modes & 0xF000) >> 12
+		return get_object_type(self.modes)
 	
 	@object_type.setter
 	def object_type(self, value: int) -> int:
-		self.modes = (self.modes & ~0xF000) | ((value & 0x000F) << 12)
+		self.modes = set_object_type(self.modes, value)
 		return value
 	
 	@property
@@ -129,11 +149,11 @@ class GitIndexEntry:
 		Only 0755 and 0644 are valid for regular files.
 		Symbolic links and gitlinks have value 0 in this field.
 		"""
-		return self.modes & 0o777
+		return get_permissions(self.modes)
 	
 	@permissions.setter
 	def permissions(self, value: int) -> int:
-		self.modes = (self.modes & ~0o777) | (value & 0o777)
+		self.modes = set_permissions(self.modes, value)
 		return value
 	
 	@property
@@ -685,12 +705,12 @@ def main(args: list[str]) -> int:
 		lines = (line for line in ls.stdout.split("\0") if len(line) > 0)
 		source_files = [
 			FileInfo(
-				get_x(int(modes[-3:], base=8)),
+				get_x(modes),
 				path,
 				path_abs,
 				relpath(path_abs, cwd)
 			)
-			for modes, path, path_abs in ((line[0], line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines))
+			for modes, path, path_abs in ((int(line[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines))
 		]
 	
 	if restore_staged:
@@ -720,11 +740,11 @@ def main(args: list[str]) -> int:
 			if not isfile(source_file.path_abs):
 				continue
 			file_modes = os.lstat(source_file.path_abs).st_mode
-			file_perms = file_modes & 0o777
+			file_perms = get_permissions(file_modes)
 			file_x = get_x(file_perms)
 			if file_x != source_file.x:
 				new_modes = set_x(file_modes, source_file.x)
-				new_perms = new_modes & 0o777
+				new_perms = get_permissions(new_modes)
 				if not dry_run:
 					os.chmod(source_file.path_abs, new_modes)
 				if not quiet:
