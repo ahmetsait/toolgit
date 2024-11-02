@@ -700,11 +700,11 @@ def main(args: list[str]) -> int:
 			entry = index_map[source_path]
 			if entry.x != source_file.x:
 				new_perms = x_set(entry.permissions, source_file.x)
-				if not quiet:
-					print(f"{format_permissions(entry.permissions, octal)} -> {format_permissions(new_perms, octal)}: [index] {shlex.quote(source_file.path_rel)}")
 				if not dry_run:
 					entry.permissions = new_perms
 					index_changed = True
+				if not quiet:
+					print(f"{format_permissions(entry.permissions, octal)} -> {format_permissions(new_perms, octal)}: [index] {shlex.quote(source_file.path_rel)}")
 		if index_changed and not dry_run:
 			with open_repo_index(repo_root, OpenMode.WRITE) as index_io:
 				write_index(index_io, index, hasher)
@@ -721,10 +721,10 @@ def main(args: list[str]) -> int:
 			if file_x != source_file.x:
 				new_modes = x_set(file_modes, source_file.x)
 				new_perms = new_modes & 0o777
-				if not quiet:
-					print(f"{format_permissions(file_perms, octal)} -> {format_permissions(new_perms, octal)}: {shlex.quote(source_file.path_rel)}")
 				if not dry_run:
 					os.chmod(source_file.path_abs, new_modes, follow_symlinks=False)
+				if not quiet:
+					print(f"{format_permissions(file_perms, octal)} -> {format_permissions(new_perms, octal)}: {shlex.quote(source_file.path_rel)}")
 	
 	return 0
 
