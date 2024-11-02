@@ -706,7 +706,7 @@ def main(args: list[str]) -> int:
 			for entry, path_abs in ((entry, join(repo_root, entry.path)) for entry in index.entries if entry.object_type == GitObjectType.FILE.value)
 		]
 	else:
-		ls = subprocess.run(shlex.split(f"git ls-tree -z -r --full-tree --format='%(objectmode)\t%(path)' {source} --") + paths, capture_output=True, encoding="utf-8")
+		ls = subprocess.run(shlex.split(f"git ls-tree -z -r --full-tree {source} --") + paths, capture_output=True, encoding="utf-8")
 		check_process(ls)
 		lines = (line for line in ls.stdout.split("\0") if len(line) > 0)
 		source_files = [
@@ -716,7 +716,7 @@ def main(args: list[str]) -> int:
 				path_abs,
 				relpath(path_abs, cwd)
 			)
-			for modes, path, path_abs in ((int(line[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines)) if get_object_type(modes) == GitObjectType.FILE.value
+			for modes, path, path_abs in ((int(line[0].split(" ")[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines)) if get_object_type(modes) == GitObjectType.FILE.value
 		]
 	
 	if restore_staged:
