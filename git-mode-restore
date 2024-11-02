@@ -149,6 +149,13 @@ class GitIndexEntry:
 		value |= self.path_length
 		return value
 	
+	@flags.setter
+	def flags(self, value: int) -> int:
+		self.assume_unchanged = value & 0x8000 != 0
+		self.extended = value & 0x4000 != 0
+		self.stage = (value & 0x3000) >> 12
+		return value
+	
 	assume_unchanged: bool = False
 	"""1-bit Assume-unchanged marker"""
 	extended: bool = False
@@ -271,9 +278,7 @@ def read_index(f: BinaryIO, hasher: "_Hash") -> GitIndex:
 		entry.obj = pack[10]
 		
 		flags: int = pack[11]
-		entry.assume_unchanged = bool(flags & 0x8000)
-		entry.extended = bool(flags & 0x4000)
-		entry.stage = (flags & 0x3000) >> 12
+		entry.flags = flags
 		entry_path_length = flags & 0xFFF
 		extended = entry.extended and index.version >= 3
 		
@@ -372,12 +377,6 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 	for entry in index.entries:
 		entrylen = 0
 		
-		flags = entry.assume_unchanged << 15
-		flags |= entry.extended << 14
-		flags |= (entry.stage & 0x3) << 12
-		path_length = len(entry.path)
-		flags |= path_length if path_length < 0xFFF else 0xFFF
-		
 		data = struct.pack(f"!10I{hasher.digest_size}sH",
 			entry.ctime_sec,
 			entry.ctime_nsec,
@@ -390,7 +389,7 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 			entry.gid,
 			entry.file_size,
 			entry.obj,
-			flags,
+			entry.flags,
 		)
 		entrylen += f.write(data)
 		hasher.update(data)
