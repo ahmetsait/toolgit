@@ -11,10 +11,8 @@ import struct
 import subprocess
 from binascii import hexlify
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import *
-from hashlib import sha1, sha256
-from math import ceil
+from hashlib import sha1
 from os.path import *
 from typing import *
 
