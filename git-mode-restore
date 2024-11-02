@@ -106,6 +106,12 @@ def str2bool(s: str) -> bool:
 	return int(s) != 0
 
 
+class GitObjectType(IntEnum):
+	DIRECTORY = 0b0100
+	FILE = 0b1000
+	GITLINK = 0b1110
+
+
 @dataclass
 class GitIndexEntry:
 	ctime_sec: int = 0
@@ -697,7 +703,7 @@ def main(args: list[str]) -> int:
 				path_abs,
 				relpath(path_abs, cwd)
 			)
-			for entry, path_abs in ((entry, join(repo_root, entry.path)) for entry in index.entries)
+			for entry, path_abs in ((entry, join(repo_root, entry.path)) for entry in index.entries if entry.object_type == GitObjectType.FILE.value)
 		]
 	else:
 		ls = subprocess.run(shlex.split(f"git ls-tree -z -r --full-tree --format='%(objectmode)\t%(path)' {source} --") + paths, capture_output=True, encoding="utf-8")
@@ -710,7 +716,7 @@ def main(args: list[str]) -> int:
 				path_abs,
 				relpath(path_abs, cwd)
 			)
-			for modes, path, path_abs in ((int(line[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines))
+			for modes, path, path_abs in ((int(line[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines)) if get_object_type(modes) == GitObjectType.FILE.value
 		]
 	
 	if restore_staged:
