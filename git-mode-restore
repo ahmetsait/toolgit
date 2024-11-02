@@ -217,7 +217,7 @@ class GitIndexEntry:
 	@property
 	def path_length(self) -> int:
 		"""12-bit Path length"""
-		return min(0xFFF, len(self.path))
+		return min(0xFFF, len(self.path.encode()))
 	
 	exflags: int = 0
 	"""
@@ -356,7 +356,7 @@ def read_index(f: BinaryIO, hasher: "_Hash") -> GitIndex:
 				entrylen += 1
 		
 		if index.version == 4:
-			entry_path_length -= len(last_path) - prefix
+			entry_path_length -= len(last_path.encode()) - prefix
 		
 		if entry_path_length < 0xFFF:
 			data = f.read(entry_path_length)
@@ -454,7 +454,7 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 		if index.version == 4:
 			diff_index = first_diff_index(last_path, entry.path)
 			entry_path = entry.path[diff_index:]
-			prefix = len(last_path) - diff_index
+			prefix = len(last_path.encode()) - diff_index
 			marked_bytes = prefix.bit_length() // 7
 			for i in range(marked_bytes):
 				bits = prefix >> 7 * (marked_bytes - 1 - i) & 0x7F | 0x80
