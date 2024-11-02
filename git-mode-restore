@@ -30,12 +30,12 @@ def first_diff_index(s1: Iterable[Any], s2: Iterable[Any]) -> int:
 	return i
 
 
-def x_set(bits: int, x: bool) -> int:
+def set_x(bits: int, x: bool) -> int:
 	"""Sets executable bits of file modes"""
 	return (bits & ~0o111) | (0o111 if x else 0o000)
 
 
-def x_get(bits: int) -> bool:
+def get_x(bits: int) -> bool:
 	"""Extracts user executable bit from file modes"""
 	return bits & 0o100 != 0
 
@@ -112,11 +112,11 @@ class GitIndexEntry:
 	@property
 	def x(self) -> bool:
 		"""Executable bit of file"""
-		return x_get(self.modes)
+		return get_x(self.modes)
 	
 	@x.setter
 	def x(self, value: bool) -> bool:
-		self.modes = x_set(self.modes, value)
+		self.modes = set_x(self.modes, value)
 		return value
 	
 	uid: int = 0
@@ -685,7 +685,7 @@ def main(args: list[str]) -> int:
 		lines = (line for line in ls.stdout.split("\0") if len(line) > 0)
 		source_files = [
 			FileInfo(
-				x_get(int(modes[-3:], base=8)),
+				get_x(int(modes[-3:], base=8)),
 				path,
 				path_abs,
 				relpath(path_abs, cwd)
@@ -703,7 +703,7 @@ def main(args: list[str]) -> int:
 				continue
 			entry = index_map[source_path]
 			if entry.x != source_file.x:
-				new_perms = x_set(entry.permissions, source_file.x)
+				new_perms = set_x(entry.permissions, source_file.x)
 				if not dry_run:
 					entry.permissions = new_perms
 					index_changed = True
@@ -721,9 +721,9 @@ def main(args: list[str]) -> int:
 				continue
 			file_modes = os.lstat(source_file.path_abs).st_mode
 			file_perms = file_modes & 0o777
-			file_x = x_get(file_perms)
+			file_x = get_x(file_perms)
 			if file_x != source_file.x:
-				new_modes = x_set(file_modes, source_file.x)
+				new_modes = set_x(file_modes, source_file.x)
 				new_perms = new_modes & 0o777
 				if not dry_run:
 					os.chmod(source_file.path_abs, new_modes)
