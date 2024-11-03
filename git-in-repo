@@ -9,7 +9,10 @@ Usage:
 
 Options:
 	-q, --quiet
-		Suppress stderr output.
+		Suppress output.
+
+	-s, --silent
+		Silence git stderr.
 
 	-?, --help
 		Show this help information and exit.
@@ -17,11 +20,16 @@ EOF
 )
 
 quiet=0
+silent=0
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		-q|--quiet)
 			quiet=1
+			shift
+			;;
+		-s|--silent)
+			silent=1
 			shift
 			;;
 		-\?|--help)
@@ -39,8 +47,20 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-if [[ quiet -eq 0 ]]; then
+if [[ silent -eq 0 ]]; then
 	git rev-parse --git-dir > /dev/null
+	success=$?
 else
 	git rev-parse --git-dir &> /dev/null
+	success=$?
 fi
+
+if [[ quiet -eq 0 ]]; then
+	if [[ success -eq 0 ]];then
+		echo "yes"
+	else
+		echo "no"
+	fi
+fi
+
+exit "$success"

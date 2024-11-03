@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-git in-repo || exit $?
+git in-repo -q || exit $?
 
 interrupt () {
 	echo "Interrupted."

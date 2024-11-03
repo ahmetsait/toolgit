@@ -8,13 +8,22 @@ Usage:
 		Returns 0 if the working tree has no changes or untracked files, non-zero otherwise.
 
 Options:
+	-q, --quiet
+		Suppress output.
+
 	-?, --help
 		Show this help information and exit.
 EOF
 )
 
+quiet=0
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
+		-q|--quiet)
+			quiet=1
+			shift
+			;;
 		-\?|--help)
 			echo "$USAGE"
 			exit 0
@@ -30,4 +39,14 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-git in-repo && [[ -z "$(git status --porcelain)" ]]
+status="$(git status --porcelain)"
+success=$?
+[[ success -eq 0 ]] || exit "$success"
+
+if [[ -z "$status" ]]; then
+	[[ quiet -eq 0 ]] && echo "yes"
+	exit 0
+else
+	[[ quiet -eq 0 ]] && echo "no"
+	exit 1
+fi

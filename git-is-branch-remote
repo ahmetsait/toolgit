@@ -8,16 +8,24 @@ Usage:
 		Returns 0 if the branch(es) refer to a remote branch.
 
 Options:
+	-q, --quiet
+		Suppress output.
+
 	-?, --help
 		Show this help information and exit.
 EOF
 )
+
+quiet=0
 
 args=()
 
 for ((i = 1; i <= $#; i++)); do
 	opt="${!i}"
 	case "$opt" in
+		-q|--quiet)
+			quiet=1
+			;;
 		-\?|--help)
 			echo "$USAGE"
 			exit 0
@@ -42,7 +50,19 @@ if [[ ${#args} -eq 0 ]]; then
 	exit 2
 fi
 
-git in-repo &&
+git in-repo -q &&
+result=0
 for arg in "${args[@]}"; do
-	[[ "$(git rev-parse --quiet --verify --symbolic-full-name "$arg")" == refs/remotes/* ]] || exit 1
+	full_name="$(git rev-parse --quiet --verify --symbolic-full-name "$arg")"
+	if [[ "$full_name" == refs/remotes/* ]]; then
+		[[ quiet -eq 0 ]] && echo "$arg: yes"
+	elif [[ "$full_name" == refs/heads/* ]]; then
+		[[ quiet -eq 0 ]] && echo "$arg: no"
+		result=1
+	else
+		echo "$app_name: [Warning] Not a branch: $arg" >&2
+		result=2
+	fi
 done
+
+exit "$result"

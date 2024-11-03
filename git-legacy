@@ -37,7 +37,7 @@ done
 
 set -- "${args[@]}"
 
-git in-repo || exit $?
+git in-repo -q || exit $?
 
 interrupt () {
 	echo "Interrupted."
@@ -57,7 +57,7 @@ git_dir="$(git dir)"
 if [[ $# -eq 0 ]]; then
 	rebase_loop
 elif [[ $# -eq 1 ]]; then
-	if ! git is-worktree-clean; then
+	if ! git is-worktree-clean -q; then
 		echo "$app_name: [Error] Working tree has changes." >&2 &&
 		return 1
 	fi

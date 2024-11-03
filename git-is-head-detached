@@ -8,13 +8,22 @@ Usage:
 		Returns 0 if HEAD is in detached state, non-zero otherwise.
 
 Options:
+	-q, --quiet
+		Suppress output.
+
 	-?, --help
 		Show this help information and exit.
 EOF
 )
 
+quiet=0
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
+		-q|--quiet)
+			quiet=1
+			shift
+			;;
 		-\?|--help)
 			echo "$USAGE"
 			exit 0
@@ -31,3 +40,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 ! git symbolic-ref --quiet HEAD > /dev/null
+is_detached=$?
+
+if [[ is_detached -eq 0 ]]; then
+	[[ quiet -eq 0 ]] && echo "yes"
+else
+	[[ quiet -eq 0 ]] && echo "no"
+fi
+
+exit "$is_detached"
