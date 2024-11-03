@@ -79,18 +79,31 @@ def format_permissions(bits: int, octal: bool) -> str:
 	return "".join(result)
 
 
-def chomp(s: str) -> str:
+def chomp(s: AnyStr) -> AnyStr:
 	"""Removes final newline from the given string"""
-	if s.endswith("\r\n"):
-		return s[:-2]
-	if s.endswith("\n"):
-		return s[:-1]
+	crlf_bytes = b"\r\n"
+	lf_bytes = b"\n"
+	if isinstance(s, bytes):
+		crlf = crlf_bytes
+		lf = lf_bytes
+	else:
+		crlf = crlf_bytes.decode()
+		lf = lf_bytes.decode()
+	
+	if s.endswith(crlf):
+		return s[:-len(crlf)]
+	if s.endswith(lf):
+		return s[:-len(lf)]
 	else:
 		return s
 
 
-def str2bool(s: str) -> bool:
-	"""Converts a true/false yes/no string to boolean"""
+def str2bool(value: AnyStr) -> bool:
+	"""Converts a true/false, yes/no or numeric string to boolean"""
+	if isinstance(value, bytes):
+		s = value.decode()
+	else:
+		s = value
 	s = s.casefold()
 	if s == "true":
 		return True
