@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
 			exit 0
 			;;
 		-*)
-			echo "Unknown option: $1" >&2
+			echo "$app_name: [Error] Unknown option: $1" >&2
 			exit 1
 			;;
 		*)
@@ -58,12 +58,12 @@ if [[ $# -eq 0 ]]; then
 	rebase_loop
 elif [[ $# -eq 1 ]]; then
 	if ! git is-worktree-clean; then
-		echo "Error: Working tree has changes." >&2 &&
+		echo "$app_name: [Error] Working tree has changes." >&2 &&
 		return 1
 	fi
 	history_tip="$1"
 	git -c rebase.instructionFormat='%s%nexec git clean -fd; comm -13 -z <(git ls-tree --name-only -r %H -z | sort -z) <(git ls-files -z | sort -z) | xargs -0 rm -rf; git checkout --quiet %H -- . && git add . && GIT_AUTHOR_DATE="%ai" GIT_AUTHOR_NAME="%an" GIT_AUTHOR_EMAIL="%ae" GIT_COMMITTER_DATE="%ci" GIT_COMMITTER_NAME="%cn" GIT_COMMITTER_EMAIL="%ce" git commit --quiet --amend --no-edit' rebase -i --rebase-merges --update-refs "$history_tip"
 	rebase_loop
 else
-	echo "Invalid number of arguments ($#): Pass a git revision name to start rebase or nothing to continue automatic merge loop." >&2
+	echo "$app_name: [Error] Invalid number of arguments ($#): Pass a git revision name to start rebase or nothing to continue automatic merge loop." >&2
 fi

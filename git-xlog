@@ -24,7 +24,7 @@ EOF
 
 getopt -q -T
 if [[ $? -ne 4 ]]; then
-    echo "$app_name: This script requires an enhanced getopt version." >&2
+    echo "$app_name: [Error] This script requires an enhanced getopt version." >&2
     exit 1
 fi
 
@@ -51,33 +51,29 @@ for ((i=0; i < ${#opts[@]}; i++)); do
         --)
             break
             ;;
-        *)
-            echo 'Internal error!' >&2
-            exit 1
-            ;;
     esac
 done
 
 if [[ ! -v diff_type ]]; then
-    echo "$app_name: Missing '--diff-type' argument." >&2
+    echo "$app_name: [Error] Missing '--diff-type' argument." >&2
     exit 1
 elif [[ -z $diff_type ]]; then
-    echo "$app_name: Missing value for argument '--diff-type'." >&2
+    echo "$app_name: [Error] Missing value for argument '--diff-type'." >&2
     exit 1
 elif [[ ${diff_type@U} == 'A' || ${diff_type@U} == "ADDED" ]]; then
     diff_mark='>'
 elif [[ ${diff_type@U} == 'R' || ${diff_type@U} == "REMOVED" ]]; then
     diff_mark='<'
 else
-    echo "$app_name: Unrecognized diff-type: '$diff_type'. Accepted values: 'A', 'Added', 'R', 'Removed'." >&2
+    echo "$app_name: [Error] Unrecognized diff-type: '$diff_type'. Accepted values: 'A', 'Added', 'R', 'Removed'." >&2
     exit 1
 fi
 
 if [[ ! -v log_opt ]]; then
-    echo "$app_name: Missing '--log-opt' argument." >&2
+    echo "$app_name: [Error] Missing '--log-opt' argument." >&2
     exit 1
 elif [[ -z $log_opt ]]; then
-    echo "$app_name: Missing value for argument '--log-opt'." >&2
+    echo "$app_name: [Error] Missing value for argument '--log-opt'." >&2
     exit 1
 fi
 
@@ -105,15 +101,15 @@ for ((i=0; i < ${#opts[@]}; i++)); do
 done
 
 if [[ ! -v search_text && ! -v search_regex ]]; then
-    echo "$app_name: No '-S' or '-G' found in log options." >&2
+    echo "$app_name: [Error] No '-S' or '-G' found in log options." >&2
     exit 1
 elif [[ -z $search_text && -z $search_regex ]]; then
-    echo "$app_name: Missing value for argument '-S' or '-G' in log options." >&2
+    echo "$app_name: [Error] Missing value for argument '-S' or '-G' in log options." >&2
     exit 1
 fi
 
 interrupt () {
-    echo "$app_name: Interrupted." >&2
+    echo "$app_name: [Error] Interrupted." >&2
     exit 1
 }
 

@@ -27,7 +27,7 @@ for ((i = 1; i <= $#; i++)); do
 			break
 			;;
 		-*)
-			echo "Unknown option: $1" >&2
+			echo "$app_name: [Error] Unknown option: $1" >&2
 			exit 1
 			;;
 		*)
@@ -37,7 +37,7 @@ for ((i = 1; i <= $#; i++)); do
 done
 
 if [[ ${#args} -eq 0 ]]; then
-	echo "$app_name: No branch is given." >&2
+	echo "$app_name: [Error] No branch is given." >&2
 	echo "Try '$app_name -?' for more information." >&2
 	exit 2
 fi
