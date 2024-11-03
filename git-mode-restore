@@ -98,6 +98,63 @@ def chomp(s: AnyStr) -> AnyStr:
 		return s
 
 
+def escape_nonprintable(s: AnyStr) -> str:
+	special_bytes = b"\0\a\b\t\n\v\f\r\033"
+	letter_bytes = b"0abtnvfrE"
+	buf = bytearray()
+	if isinstance(s, bytes):
+		for b in s:
+			if b in special_bytes:
+				buf.extend(b"\\")
+				buf.append(letter_bytes[special_bytes.index(b)])
+			elif not chr(b).isprintable():
+				buf.extend(b"\\x")
+				buf.extend(format(b, "02x").encode())
+			else:
+				buf.append(b)
+	else:
+		special_chars = special_bytes.decode()
+		letter_chars = letter_bytes.decode()
+		
+		for c in s:
+			if c in special_chars:
+				buf.extend(b"\\")
+				buf.append(ord(letter_chars[special_chars.index(c)]))
+			elif not c.isprintable():
+				buf.extend(b"\\x")
+				buf.extend(format(c, "02x").encode())
+			else:
+				buf.append(ord(c))
+	
+	return buf.decode()
+
+
+def requires_quoting(s: AnyStr) -> bool:
+	special_bytes = b" !\"#$&'()*,;<>?[\]^`{|}~"
+	if isinstance(s, bytes):
+		special_chars = special_bytes
+	else:
+		special_chars = special_bytes.decode()
+	
+	for c in s:
+		if c in special_chars:
+			return True
+	
+	if isinstance(s, bytes):
+		return not s.decode().isprintable()
+	else:
+		return not s.isprintable()
+
+
+def quote(s: AnyStr) -> str:
+	if not requires_quoting(s):
+		if isinstance(s, bytes):
+			return s.decode()
+		else:
+			return s
+	return "'" + escape_nonprintable(s).replace("'", "'\"'\"'") + "'"
+
+
 def str2bool(value: AnyStr) -> bool:
 	"""Converts a true/false, yes/no or numeric string to boolean"""
 	if isinstance(value, bytes):
@@ -230,7 +287,7 @@ class GitIndexEntry:
 	@property
 	def path_length(self) -> int:
 		"""12-bit Path length"""
-		return min(0xFFF, len(self.path.encode()))
+		return min(0xFFF, len(self.path))
 	
 	exflags: int = 0
 	"""
@@ -261,7 +318,7 @@ class GitIndexEntry:
 		self.exflags = (self.exflags & ~0x2000) | (value << 13)
 		return value
 	
-	path: str = ""
+	path: bytes = b""
 	"""Path of index entry relative to the Git repository root"""
 
 
@@ -318,7 +375,7 @@ def read_index(f: BinaryIO, hasher: "_Hash") -> GitIndex:
 	index.entries = list[GitIndexEntry]()
 	index.extensions = list[GitIndexExtension]()
 	
-	last_path = ""
+	last_path = b""
 	for i in range(entry_count):
 		fmt = f"!10I{hasher.digest_size}sH"
 		size = struct.calcsize(fmt)
@@ -369,12 +426,12 @@ def read_index(f: BinaryIO, hasher: "_Hash") -> GitIndex:
 				entrylen += 1
 		
 		if index.version == 4:
-			entry_path_length -= len(last_path.encode()) - prefix
+			entry_path_length -= len(last_path) - prefix
 		
 		if entry_path_length < 0xFFF:
 			data = f.read(entry_path_length)
 			hasher.update(data)
-			entry.path = last_path[:-prefix] + data.decode()
+			entry.path = last_path[:-prefix] + data
 			hasher.update(f.read(1)) # NULL terminator
 			entrylen += entry_path_length + 1
 		else:
@@ -386,7 +443,7 @@ def read_index(f: BinaryIO, hasher: "_Hash") -> GitIndex:
 				if ch == 0: # NULL terminator
 					break
 				buf.append(ch)
-			entry.path = last_path[:-prefix] + buf.decode()
+			entry.path = last_path[:-prefix] + buf
 			entrylen += len(buf) + 1 # \0
 		
 		if index.version == 4:
@@ -437,7 +494,7 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 	f.write(data)
 	hasher.update(data)
 	
-	last_path = ""
+	last_path = b""
 	for entry in index.entries:
 		entrylen = 0
 		
@@ -467,7 +524,7 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 		if index.version == 4:
 			diff_index = first_diff_index(last_path, entry.path)
 			entry_path = entry.path[diff_index:]
-			prefix = len(last_path.encode()) - diff_index
+			prefix = len(last_path) - diff_index
 			marked_bytes = prefix.bit_length() // 7
 			for i in range(marked_bytes):
 				bits = prefix >> 7 * (marked_bytes - 1 - i) & 0x7F | 0x80
@@ -479,8 +536,8 @@ def write_index(f: BinaryIO, index: GitIndex, hasher: "_Hash") -> bytes:
 			entrylen += f.write(data)
 			hasher.update(data)
 		
-		entrylen += f.write(entry_path.encode())
-		hasher.update(entry_path.encode())
+		entrylen += f.write(entry_path)
+		hasher.update(entry_path)
 		entrylen += f.write(b"\0")
 		hasher.update(b"\0")
 		
@@ -511,18 +568,18 @@ class GitError(Exception):
 
 
 class GitNotARepositoryError(GitError):
-	def __init__(self, path: str, mount_point: Optional[str] = None):
+	def __init__(self, path: bytes, mount_point: Optional[bytes] = None):
 		if mount_point is None:
-			super().__init__(f"Not a Git repository (or any of the parent directories): {shlex.quote(path)}")
+			super().__init__(f"Not a Git repository (or any of the parent directories): {quote(path)}")
 		else:
-			super().__init__(f"Not a Git repository (or any parent up to mount point {shlex.quote(mount_point)}): {shlex.quote(path)}")
+			super().__init__(f"Not a Git repository (or any parent up to mount point {quote(mount_point)}): {quote(path)}")
 		self.path = path
 		self.mount_point = mount_point
 
 
 class GitInvalidObjectFormatError(GitError):
 	def __init__(self, object_format: str):
-		super().__init__(f"Invalid value for 'extensions.objectformat': {shlex.quote(object_format)}")
+		super().__init__(f"Invalid value for 'extensions.objectformat': {quote(object_format)}")
 		self.object_format = object_format
 
 
@@ -534,7 +591,7 @@ class GitInvalidRepositoryFormatVersionError(GitError):
 
 class GitBadBooleanEnvironmentValueError(GitError):
 	def __init__(self, value: str, variable: str):
-		super().__init__(f"Bad boolean environment value {shlex.quote(value)} for {shlex.quote(variable)}")
+		super().__init__(f"Bad boolean environment value {quote(value)} for {quote(variable)}")
 		self.value = value
 
 
@@ -545,8 +602,8 @@ class GitIndexTooBigError(GitError):
 
 
 class GitIndexNotInitializedError(GitError):
-	def __init__(self, root: str):
-		super().__init__(f"Git index not initialized yet for {shlex.quote(root)}")
+	def __init__(self, root: bytes):
+		super().__init__(f"Git index not initialized yet for {quote(root)}")
 		self.root = root
 
 
@@ -557,7 +614,7 @@ class GitIndexCorruptedError(GitError):
 		self.found = found
 
 
-def get_repo_root(path: str = ".") -> str:
+def get_repo_root(path: bytes = b".") -> bytes:
 	"""Finds Git repository root by searching the path upwards"""
 	git_discovery_across_filesystem = os.environ.get("GIT_DISCOVERY_ACROSS_FILESYSTEM", "false")
 	try:
@@ -569,7 +626,7 @@ def get_repo_root(path: str = ".") -> str:
 	current = path
 	dev = os.lstat(current).st_dev
 	while True:
-		if isdir(join(current, ".git")):
+		if isdir(join(current, b".git")):
 			return current
 		parent = dirname(current)
 		if len(parent) == 0 or current == parent or samefile(current, parent):
@@ -579,17 +636,20 @@ def get_repo_root(path: str = ".") -> str:
 		current = parent
 
 
-def get_repo_object_hasher(repo_path: str = ".") -> "_Hash":
+def get_repo_object_hasher(repo_path: bytes = b".") -> "_Hash":
 	"""Returns a hashlib algorithm instance appropriate for generating Git object IDs of given repository"""
 	git_config = configparser.ConfigParser(strict=False)
-	git_config.read(join(repo_path, ".git", "config"))
+	git_config.read(join(repo_path, b".git", b"config"))
 	repo_version = int(git_config.get("core", "repositoryformatversion", fallback="0"))
 	
 	if repo_version == 0:
 		return sha1()
 	if repo_version == 1:
 		object_format = git_config.get("extensions", "objectformat", fallback="sha1")
-		return hashlib.new(object_format)
+		try:
+			return hashlib.new(object_format)
+		except ValueError:
+			raise GitInvalidObjectFormatError(object_format)
 	else:
 		raise GitInvalidRepositoryFormatVersionError(repo_version)
 
@@ -598,9 +658,9 @@ class OpenMode(IntEnum):
 	READ = auto()
 	WRITE = auto()
 
-def open_repo_index(repo_path: str = ".", mode: OpenMode = OpenMode.READ) -> BinaryIO:
+def open_repo_index(repo_path: bytes = b".", mode: OpenMode = OpenMode.READ) -> BinaryIO:
 	"""Open the Git index file of given repository as a binary stream"""
-	index_path = join(repo_path, ".git", "index")
+	index_path = join(repo_path, b".git", b"index")
 	try:
 		if mode == OpenMode.READ:
 			return open(index_path, "rb")
@@ -657,14 +717,14 @@ def main(args: list[str]) -> int:
 	)
 	argv = parser.parse_args(args)
 	
-	cwd = realpath(abspath(os.getcwd()))
+	cwd = realpath(abspath(os.getcwd().encode()))
 	repo_root = realpath(get_repo_root(cwd))
 	
 	class PathTuple(NamedTuple):
-		path_orig: str
-		path: str
+		path_orig: bytes
+		path: bytes
 	
-	path_tuples = [PathTuple(p, realpath(abspath(p))) for p in argv.path]
+	path_tuples = [PathTuple(p, realpath(abspath(p))) for p in (p.encode() for p in argv.path)]
 	paths = [tp.path for tp in path_tuples]
 	restore_staged: bool = argv.staged
 	restore_worktree: bool = argv.worktree or not restore_staged
@@ -676,19 +736,19 @@ def main(args: list[str]) -> int:
 	outside = False
 	for path_orig, path in path_tuples:
 		if commonpath([repo_root, path]) != repo_root:
-			print(f"{parser.prog}: Path {shlex.quote(path_orig)} points to outside of the repository {shlex.quote(repo_root)}", file=sys.stderr)
+			print(f"{parser.prog}: Path {quote(path_orig)} points to outside of the repository {quote(repo_root)}", file=sys.stderr)
 			outside = True
 	if outside:
 		return 1
 	
-	git_fileMode = subprocess.run(shlex.split("git config get core.fileMode"), capture_output=True, encoding="utf-8")
+	git_fileMode = subprocess.run(shlex.split("git config get core.fileMode"), capture_output=True)
 	check_process(git_fileMode)
 	file_mode = str2bool(chomp(git_fileMode.stdout))
 	
 	if not file_mode:
 		return 0
 	
-	git_ignoreCase = subprocess.run(shlex.split("git config get core.ignoreCase"), capture_output=True, encoding="utf-8")
+	git_ignoreCase = subprocess.run(shlex.split("git config get core.ignoreCase"), capture_output=True)
 	check_process(git_ignoreCase)
 	ignore_case = str2bool(chomp(git_ignoreCase.stdout))
 	
@@ -697,15 +757,15 @@ def main(args: list[str]) -> int:
 	if restore_staged or source is None:
 		with open_repo_index(repo_root) as index_io:
 			index = read_index(index_io, hasher)
-			index_map = { (entry.path.casefold() if ignore_case else entry.path): entry for entry in index.entries }
+			index_map = { (entry.path.decode().casefold().encode() if ignore_case else entry.path): entry for entry in index.entries }
 	
 	class FileInfo(NamedTuple):
 		x: bool
-		path: str
+		path: bytes
 		"""Path relative to repository root"""
-		path_abs: str
+		path_abs: bytes
 		"""Absolute path"""
-		path_rel: str
+		path_rel: bytes
 		"""Path relative to current working directory"""
 	
 	if source is None:
@@ -719,9 +779,9 @@ def main(args: list[str]) -> int:
 			for entry, path_abs in ((entry, join(repo_root, entry.path)) for entry in index.entries if entry.object_type == GitObjectType.FILE.value)
 		]
 	else:
-		ls = subprocess.run(shlex.split(f"git ls-tree -z -r --full-tree {source} --") + paths, capture_output=True, encoding="utf-8")
+		ls = subprocess.run([arg.encode() for arg in shlex.split(f"git ls-tree -z -r --full-tree {source} --")] + paths, capture_output=True)
 		check_process(ls)
-		lines = (line for line in ls.stdout.split("\0") if len(line) > 0)
+		lines = (line for line in ls.stdout.split(b"\0") if len(line) > 0)
 		source_files = [
 			FileInfo(
 				get_x(modes),
@@ -729,7 +789,7 @@ def main(args: list[str]) -> int:
 				path_abs,
 				relpath(path_abs, cwd)
 			)
-			for modes, path, path_abs in ((int(line[0].split(" ")[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split("\t", maxsplit=1) for line in lines)) if get_object_type(modes) == GitObjectType.FILE.value
+			for modes, path, path_abs in ((int(line[0].split(b" ")[0], base=8), line[1], join(repo_root, line[1])) for line in (line.split(b"\t", maxsplit=1) for line in lines)) if get_object_type(modes) == GitObjectType.FILE.value
 		]
 	
 	if restore_staged:
@@ -737,7 +797,7 @@ def main(args: list[str]) -> int:
 		for source_file in source_files:
 			if not any(path for path in paths if commonpath([source_file.path_abs, path]) == path):
 				continue
-			source_path = (source_file.path.casefold() if ignore_case else source_file.path)
+			source_path = (source_file.path.decode().casefold().encode() if ignore_case else source_file.path)
 			if not source_path in index_map:
 				continue
 			entry = index_map[source_path]
@@ -747,7 +807,7 @@ def main(args: list[str]) -> int:
 					entry.permissions = new_perms
 					index_changed = True
 				if not quiet:
-					print(f"{format_permissions(entry.permissions, octal)} -> {format_permissions(new_perms, octal)}: [index] {shlex.quote(source_file.path_rel)}")
+					print(f"{format_permissions(entry.permissions, octal)} -> {format_permissions(new_perms, octal)}: [index] {quote(source_file.path_rel)}")
 		if index_changed and not dry_run:
 			with open_repo_index(repo_root, OpenMode.WRITE) as index_io:
 				write_index(index_io, index, hasher)
@@ -767,12 +827,12 @@ def main(args: list[str]) -> int:
 				if not dry_run:
 					os.chmod(source_file.path_abs, new_modes)
 				if not quiet:
-					print(f"{format_permissions(file_perms, octal)} -> {format_permissions(new_perms, octal)}: {shlex.quote(source_file.path_rel)}")
+					print(f"{format_permissions(file_perms, octal)} -> {format_permissions(new_perms, octal)}: {quote(source_file.path_rel)}")
 	
 	return 0
 
 
-def check_process(proc: subprocess.CompletedProcess[str]) -> None:
+def check_process(proc: subprocess.CompletedProcess[AnyStr]) -> None:
 	if proc.returncode != 0:
 		print(chomp(proc.stderr), file=sys.stderr)
 		sys.exit(proc.returncode)
