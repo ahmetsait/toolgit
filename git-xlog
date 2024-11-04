@@ -18,7 +18,7 @@ Options:
 	-d, --diff-opt=<DIFF_OPTIONS>
 		Options to pass on to git diff commands.
 
-	--help
+	-?, --help
 		Show this help information and exit.
 EOF
 }
@@ -28,6 +28,19 @@ if [[ $? -ne 4 ]]; then
 	echo "$app_name: [Error] This script requires an enhanced getopt version." >&2
 	exit 1
 fi
+
+for ((i=1; i <= $#; i++)); do
+	opt="${!i}"
+	case "$opt" in
+		-\?|--help)
+			print_help
+			exit 0
+			;;
+		--)
+			break
+			;;
+	esac
+done
 
 opts=$(getopt -o 't:l:d:' --long 'help,diff-type:,log-opt:,diff-opt:' -n "$app_name" -- "$@") || exit $?
 
