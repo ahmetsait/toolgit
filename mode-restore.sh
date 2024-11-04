@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-"${app_dir}/git-in-repo" -q || exit $?
+git rev-parse --git-dir > /dev/null || exit $?
 
 if [[ staged -eq 0 && worktree -eq 0 ]]; then
 	worktree=1

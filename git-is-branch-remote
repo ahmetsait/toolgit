@@ -52,7 +52,7 @@ if [[ ${#args} -eq 0 ]]; then
 	exit 2
 fi
 
-"${app_dir}/git-in-repo" -q &&
+git rev-parse --git-dir > /dev/null &&
 result=0
 for arg in "${args[@]}"; do
 	full_name="$(git rev-parse --quiet --verify --symbolic-full-name "$arg")"

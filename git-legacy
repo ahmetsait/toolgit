@@ -39,7 +39,7 @@ done
 
 set -- "${args[@]}"
 
-"${app_dir}/git-in-repo" -q || exit $?
+git_dir="$(git rev-parse --git-dir)" || exit $?
 
 interrupt () {
 	echo "Interrupted."
@@ -53,8 +53,6 @@ rebase_loop () {
 		git add . && git -c core.editor=true rebase --continue
 	done
 }
-
-git_dir="$(git rev-parse --git-dir)"
 
 if [[ $# -eq 0 ]]; then
 	rebase_loop
