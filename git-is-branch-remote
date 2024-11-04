@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
+app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
 print_help() {
 	expand -t 4 << EOF
@@ -51,7 +52,7 @@ if [[ ${#args} -eq 0 ]]; then
 	exit 2
 fi
 
-git in-repo -q &&
+"${app_dir}/git-in-repo" -q &&
 result=0
 for arg in "${args[@]}"; do
 	full_name="$(git rev-parse --quiet --verify --symbolic-full-name "$arg")"

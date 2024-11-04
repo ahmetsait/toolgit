@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
+app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
 print_help() {
 	expand -t 4 << EOF
@@ -31,17 +32,17 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-git in-repo -q || exit $?
+"${app_dir}/git-in-repo" -q || exit $?
 
 git fetch --all --prune &&
 
 current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
-main_branch="$(git main-branch --quiet)" &&
+main_branch="$("${app_dir}/git-main-branch" --quiet)" &&
 
 for branch in $(git for-each-ref --format '%(refname) %(upstream:track)' refs/heads | awk '$2 == "[gone]" {sub("refs/heads/", "", $1); print $1}'); do
 	if [[ $branch == $current_branch ]]; then
 		if [[ $branch != $main_branch ]]; then
-			if ! git is-worktree-clean -q; then
+			if ! "${app_dir}/git-is-worktree-clean" -q; then
 				echo "$app_name: [Error] Cannot delete current branch: Working tree has changes." >&2
 				exit 1
 			fi

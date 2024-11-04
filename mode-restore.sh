@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
+app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
 print_help() {
 	expand -t 4 << EOF
@@ -48,7 +49,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-git in-repo -q || exit $?
+"${app_dir}/git-in-repo" -q || exit $?
 
 if [[ staged -eq 0 && worktree -eq 0 ]]; then
 	worktree=1

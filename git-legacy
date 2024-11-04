@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
+app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
 print_help() {
 	expand -t 4 << EOF
@@ -38,7 +39,7 @@ done
 
 set -- "${args[@]}"
 
-git in-repo -q || exit $?
+"${app_dir}/git-in-repo" -q || exit $?
 
 interrupt () {
 	echo "Interrupted."
@@ -53,12 +54,12 @@ rebase_loop () {
 	done
 }
 
-git_dir="$(git dir)"
+git_dir="$("${app_dir}/git-dir")"
 
 if [[ $# -eq 0 ]]; then
 	rebase_loop
 elif [[ $# -eq 1 ]]; then
-	if ! git is-worktree-clean -q; then
+	if ! "${app_dir}/git-is-worktree-clean" -q; then
 		echo "$app_name: [Error] Working tree has changes." >&2 &&
 		return 1
 	fi
