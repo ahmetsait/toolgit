@@ -54,7 +54,7 @@ rebase_loop () {
 	done
 }
 
-git_dir="$("${app_dir}/git-dir")"
+git_dir="$(git rev-parse --git-dir)"
 
 if [[ $# -eq 0 ]]; then
 	rebase_loop
