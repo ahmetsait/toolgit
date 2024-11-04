@@ -6,26 +6,17 @@ app_dir="$(dirname "${BASH_SOURCE[0]}")"
 print_help() {
 	expand -t 4 << EOF
 Usage:
-	$app_name [--force]
+	$app_name
 		Expire the reflog and run a full garbage collection on the Git repository.
 
 Options:
-	-f, --force
-		Disable safety checks.
-
 	-?, --help
 		Show this help information and exit.
 EOF
 }
 
-force=0
-
 while [[ $# -gt 0 ]]; do
 	case "$1" in
-		-f|--force)
-			force=1
-			shift
-			;;
 		-\?|--help)
 			print_help
 			exit 0
@@ -40,7 +31,5 @@ while [[ $# -gt 0 ]]; do
 			;;
 	esac
 done
-
-"${app_dir}/git-in-repo" -q || exit $?
 
 git -c gc.reflogExpire=0 -c gc.reflogExpireUnreachable=0 -c gc.rerereresolved=0 -c gc.rerereunresolved=0 -c gc.pruneExpire=now gc
