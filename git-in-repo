@@ -2,7 +2,8 @@
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
 
-USAGE=$(expand -t 4 << EOF
+print_help() {
+	expand -t 4 << EOF
 Usage:
 	$app_name
 		Returns 0 if current working directory is a Git repository, non-zero otherwise.
@@ -17,7 +18,7 @@ Options:
 	-?, --help
 		Show this help information and exit.
 EOF
-)
+}
 
 quiet=0
 silent=0
@@ -33,7 +34,7 @@ while [[ $# -gt 0 ]]; do
 			shift
 			;;
 		-\?|--help)
-			echo "$USAGE"
+			print_help
 			exit 0
 			;;
 		-*)

@@ -2,7 +2,8 @@
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
 
-USAGE=$(expand -t 4 << EOF
+print_help() {
+	expand -t 4 << EOF
 Usage:
 	$app_name
 		Amend currently staged changes.
@@ -11,12 +12,12 @@ Options:
 	-?, --help
 		Show this help information and exit.
 EOF
-)
+}
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		-\?|--help)
-			echo "$USAGE"
+			print_help
 			exit 0
 			;;
 		-*)

@@ -2,7 +2,8 @@
 
 app_name="$(basename "${BASH_SOURCE[0]}")"
 
-USAGE=$(expand -t 4 << EOF
+print_help() {
+	expand -t 4 << EOF
 Usage:
 	$app_name
 		Search history for string only in added or removed lines.
@@ -20,7 +21,7 @@ Options:
 	--help
 		Show this help information and exit.
 EOF
-)
+}
 
 getopt -q -T
 if [[ $? -ne 4 ]]; then
@@ -36,7 +37,7 @@ for ((i=0; i < ${#opts[@]}; i++)); do
 	opt="${opts[$i]}"
 	case "$opt" in
 		--help)
-			echo "$USAGE"
+			print_help
 			exit 0
 			;;
 		-t|--diff-type)
