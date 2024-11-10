@@ -46,7 +46,7 @@ for ((i = 1; i <= $#; i++)); do
 	esac
 done
 
-if [[ ${#args} -eq 0 ]]; then
+if [[ ${#args[@]} -eq 0 ]]; then
 	echo "$app_name: [Error] No branch is given." >&2
 	echo "Try '$app_name -?' for more information." >&2
 	exit 2
