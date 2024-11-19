@@ -23,7 +23,7 @@ Commands
 | `git-is-branch-remote`      | Returns 0 if the branch(es) refer to a remote branch.                                 |
 | `git-is-head-detached`      | Returns 0 if HEAD is in detached state, non-zero otherwise.                           |
 | `git-is-worktree-clean`     | Returns 0 if the working tree has no changes or untracked files, non-zero otherwise.  |
-| `git-legacy`                | Rebase the whole history of current HEAD on top of <revision>.                        |
+| `git-legacy`                | Rebase the whole history of current HEAD on top of `revision`.                        |
 | `git-main-branch`           | Get the name of the main (default) branch.                                            |
 | `git-mode-restore`          | Restore file modes in index and/or worktree.                                          |
 | `git root`                  | (Alias) Output root path of this Git repository.                                      |
