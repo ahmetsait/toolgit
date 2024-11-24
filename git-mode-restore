@@ -130,7 +130,7 @@ def escape_nonprintable(s: AnyStr) -> str:
 
 
 def requires_quoting(s: AnyStr) -> bool:
-	special_bytes = b" !\"#$&'()*,;<>?[\]^`{|}~"
+	special_bytes = b" !\"#$&'()*,;<>?[\\]^`{|}~"
 	if isinstance(s, bytes):
 		special_chars = special_bytes
 	else:
