@@ -42,17 +42,13 @@ for ((i=1; i <= $#; i++)); do
 	esac
 done
 
-opts=$(getopt -o 't:l:d:' --long 'help,diff-type:,log-opt:,diff-opt:' -n "$app_name" -- "$@") || exit $?
+opts=$(getopt -o 't:l:d:' -l 'diff-type:,log-opt:,diff-opt:' -n "$app_name" -- "$@") || exit $?
 
 eval "opts=($opts)"
 
 for ((i=0; i < ${#opts[@]}; i++)); do
 	opt="${opts[$i]}"
 	case "$opt" in
-		--help)
-			print_help
-			exit 0
-			;;
 		-t|--diff-type)
 			diff_type="${opts[++i]}"
 			;;
