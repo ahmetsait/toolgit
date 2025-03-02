@@ -75,7 +75,7 @@ elif [[ ${diff_type@U} == 'A' || ${diff_type@U} == "ADDED" ]]; then
 elif [[ ${diff_type@U} == 'R' || ${diff_type@U} == "REMOVED" ]]; then
 	diff_mark='<'
 else
-	echo "$app_name: [Error] Unrecognized diff-type: '$diff_type'. Accepted values: 'A', 'Added', 'R', 'Removed'." >&2
+	echo "$app_name: [Error] Unrecognized diff-type: ${diff_type@Q}. Accepted values: 'A', 'Added', 'R', 'Removed'." >&2
 	exit 1
 fi
 

@@ -47,12 +47,13 @@ force_pull() {
 	local has_upstream=$?
 	if [[ has_upstream -eq 0 ]]; then
 		if git merge-base --is-ancestor "$upstream" "$branch"; then
-			echo "'$branch' is already up to date with '${upstream%/$branch}'."
+			local abbrev="${upstream%/$branch}"
+			echo "${branch@Q} is already up to date with ${abbrev@Q}."
 		else
 			branch_sha_short="$(git rev-parse --quiet --short --verify "$branch")" &&
 			upstream_sha_short="$(git rev-parse --quiet --short --verify "$upstream")" &&
 			echo git update-ref "$branch_full_name" "$upstream" &&
-			echo "Update '$branch' ("$branch_sha_short") to '$upstream' ("$upstream_sha_short"): $(git show --no-patch --format="%s" "$upstream")"
+			echo "Update ${branch@Q} ("$branch_sha_short") to ${upstream@Q} ("$upstream_sha_short"): $(git show --no-patch --format="%s" "$upstream")"
 		fi
 	fi
 }

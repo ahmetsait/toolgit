@@ -70,7 +70,8 @@ for branch in $(git branch --list --format="%(refname:short)"); do
 		branch_sha="$(git rev-parse --quiet --verify "$branch")" &&
 		upstream_sha="$(git rev-parse --quiet --verify "$upstream")" &&
 		if git merge-base --is-ancestor "$upstream_sha" "$branch_sha"; then
-			echo "'$branch' is already up to date with '${upstream%/$branch}'."
+			abbrev="${upstream%/$branch}"
+			echo "${branch@Q} is already up to date with ${abbrev@Q}."
 			continue
 		fi &&
 		if [[ "$branch" == "$current_branch" ]]; then
@@ -78,7 +79,7 @@ for branch in $(git branch --list --format="%(refname:short)"); do
 		else
 			git fetch . --quiet "$upstream:$branch"
 		fi &&
-		echo "Updated '$branch' -> '$upstream'" ||
-		echo "Cannot fast forward '$branch' to '$upstream'"
+		echo "Updated ${branch@Q} -> ${upstream@Q}" ||
+		echo "Cannot fast forward ${branch@Q} to ${upstream@Q}"
 	fi
 done
