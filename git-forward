@@ -75,7 +75,11 @@ for branch in $(git branch --list --format="%(refname:short)"); do
 			continue
 		fi &&
 		if [[ "$branch" == "$current_branch" ]]; then
-			git pull --ff-only --quiet
+			if [[ -v remote ]]; then
+				git pull --ff-only --quiet "$remote" "$branch"
+			else
+				git pull --ff-only --quiet
+			fi
 		else
 			git fetch . --quiet "$upstream:$branch"
 		fi &&
