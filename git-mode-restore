@@ -98,6 +98,13 @@ def chomp(s: AnyStr) -> AnyStr:
 		return s
 
 
+def to_str(s: AnyStr) -> str:
+	if isinstance(s, bytes):
+		return s.decode()
+	else:
+		return s
+
+
 def escape_nonprintable(s: AnyStr) -> str:
 	special_bytes = b"\0\a\b\t\n\v\f\r\033"
 	letter_bytes = b"0abtnvfrE"
@@ -742,15 +749,13 @@ def main(args: list[str]) -> int:
 		return 1
 	
 	git_fileMode = subprocess.run(shlex.split("git config get core.fileMode"), capture_output=True)
-	check_process(git_fileMode)
-	file_mode = str2bool(chomp(git_fileMode.stdout))
+	file_mode = str2bool(chomp(git_fileMode.stdout)) if git_fileMode.returncode else True
 	
 	if not file_mode:
 		return 0
 	
 	git_ignoreCase = subprocess.run(shlex.split("git config get core.ignoreCase"), capture_output=True)
-	check_process(git_ignoreCase)
-	ignore_case = str2bool(chomp(git_ignoreCase.stdout))
+	ignore_case = str2bool(chomp(git_ignoreCase.stdout)) if git_ignoreCase.returncode else False
 	
 	hasher = get_repo_object_hasher(repo_root)
 	
@@ -834,7 +839,7 @@ def main(args: list[str]) -> int:
 
 def check_process(proc: subprocess.CompletedProcess[AnyStr]) -> None:
 	if proc.returncode != 0:
-		print(chomp(proc.stderr), file=sys.stderr)
+		print(chomp(to_str(proc.stderr)), file=sys.stderr)
 		sys.exit(proc.returncode)
 
 
