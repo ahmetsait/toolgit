@@ -1,7 +1,7 @@
 <div align="center">
 
 ToolGit  
-[![Platforms](https://img.shields.io/badge/platforms-cygwin%20%7C%20posix-blue)](https://github.com/ahmetsait/toolgit/releases) [![License](https://img.shields.io/github/license/ahmetsait/toolgit)](UNLICENSE.txt)
+[![Platforms](https://img.shields.io/badge/platforms-cygwin%20%7C%20posix-blue)](https://github.com/ahmetsait/toolgit/releases) [![License](https://img.shields.io/github/license/ahmetsait/toolgit)](UNLICENSE.txt) [![Sponsor](https://img.shields.io/badge/Sponsor-black?logo=githubsponsors)](https://github.com/sponsors/ahmetsait)
 ===
 Git Productivity Toolkit
 </div>
