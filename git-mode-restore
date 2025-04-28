@@ -665,6 +665,7 @@ class OpenMode(IntEnum):
 	READ = auto()
 	WRITE = auto()
 
+
 def open_repo_index(repo_path: bytes = b".", mode: OpenMode = OpenMode.READ) -> BinaryIO:
 	"""Open the Git index file of given repository as a binary stream"""
 	index_path = join(repo_path, b".git", b"index")
@@ -749,13 +750,13 @@ def main(args: list[str]) -> int:
 		return 1
 	
 	git_fileMode = subprocess.run(shlex.split("git config get core.fileMode"), capture_output=True)
-	file_mode = str2bool(chomp(git_fileMode.stdout)) if git_fileMode.returncode else True
+	file_mode = str2bool(chomp(git_fileMode.stdout)) if git_fileMode.returncode == 0 else True
 	
 	if not file_mode:
 		return 0
 	
 	git_ignoreCase = subprocess.run(shlex.split("git config get core.ignoreCase"), capture_output=True)
-	ignore_case = str2bool(chomp(git_ignoreCase.stdout)) if git_ignoreCase.returncode else False
+	ignore_case = str2bool(chomp(git_ignoreCase.stdout)) if git_ignoreCase.returncode == 0 else False
 	
 	hasher = get_repo_object_hasher(repo_root)
 	
