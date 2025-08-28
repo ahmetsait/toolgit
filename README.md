@@ -13,7 +13,7 @@ Commands
 | Command                     | Description                                                                           |
 | -------                     | -----------                                                                           |
 | `git amend`                 | (Alias) Amend currently staged changes.                                               |
-| `git-delete-gone-branches`  | Delete local branches that no longer exist on remote.                                 |
+| `git-gone`                  | Delete local branches that no longer exist on remote.                                 |
 | `git dir`                   | (Alias) Output `.git` directory path of this Git repository.                          |
 | `git-force-pull`            | Fetch and force pull remote tracking branch(es) by doing a hard reset.                |
 | `git-forward`               | Fetch and fast forward all remote tracking branches.                                  |
