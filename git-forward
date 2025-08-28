@@ -6,17 +6,24 @@ app_dir="$(dirname "${BASH_SOURCE[0]}")"
 print_help() {
 	expand -t 4 << EOF
 Usage:
-	$app_name [REMOTE]
+	$app_name [OPTIONS] [REMOTE]
 		Fetch and fast forward all remote tracking branches.
 		If a remote is given, tries to update from remote branches with the same name.
 
 Options:
+	-r, --recursive
+		Recurse submodules.
+
 	-?, --help
 		Show this help information and exit.
 EOF
 }
 
-args=()
+getopt -q -T
+if [[ $? -ne 4 ]]; then
+	echo "$app_name: [Error] This script requires an enhanced getopt version." >&2
+	exit 1
+fi
 
 for ((i = 1; i <= $#; i++)); do
 	opt="${!i}"
@@ -26,15 +33,27 @@ for ((i = 1; i <= $#; i++)); do
 			exit 0
 			;;
 		--)
-			args+=("${@:i+1}")
 			break
 			;;
-		-*)
-			echo "$app_name: [Error] Unknown option: $1" >&2
-			exit 1
+	esac
+done
+
+opts=$(getopt --options 'r' --longoptions 'recursive' --name "$app_name" -- "$@") || exit $?
+
+eval "opts=($opts)"
+
+args=()
+recursive=0
+
+for ((i=0; i < ${#opts[@]}; i++)); do
+	opt="${opts[$i]}"
+	case "$opt" in
+		-r|--recursive)
+			recursive=1
 			;;
-		*)
-			args+=("$opt")
+		--)
+			args+=("${opts[@]:i+1}")
+			break
 			;;
 	esac
 done
@@ -56,34 +75,47 @@ interrupt () {
 
 trap interrupt INT
 
-git fetch --all &&
-current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
-for branch in $(git branch --list --format="%(refname:short)"); do
-	if [[ -v remote ]]; then
-		upstream="$remote/$(git rev-parse --verify --quiet --abbrev-ref "$branch")"
-		has_upstream=0
-	else
-		upstream="$(git rev-parse --verify --quiet --abbrev-ref "$branch@{upstream}")"
-		has_upstream="$?"
-	fi
-	if [[ has_upstream -eq 0 ]]; then
-		branch_sha="$(git rev-parse --quiet --verify "$branch")" &&
-		upstream_sha="$(git rev-parse --quiet --verify "$upstream")" &&
-		if git merge-base --is-ancestor "$upstream_sha" "$branch_sha"; then
-			abbrev="${upstream%/$branch}"
-			echo "${branch@Q} is already up to date with ${abbrev@Q}."
-			continue
-		fi &&
-		if [[ "$branch" == "$current_branch" ]]; then
-			if [[ -v remote ]]; then
-				git -c advice.diverging=false pull --ff-only --quiet "$remote" "$branch" 2>/dev/null
-			else
-				git -c advice.diverging=false pull --ff-only --quiet 2>/dev/null
-			fi
+forward() {
+	current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
+	for branch in $(git branch --list --format="%(refname:short)"); do
+		if [[ -v remote ]]; then
+			upstream="$remote/$(git rev-parse --verify --quiet --abbrev-ref "$branch")"
+			has_upstream=0
 		else
-			git fetch . --quiet "$upstream:$branch"
-		fi &&
-		echo "Updated ${branch@Q} -> ${upstream@Q}" ||
-		echo "Cannot fast forward ${branch@Q} to ${upstream@Q}"
-	fi
-done
+			upstream="$(git rev-parse --verify --quiet --abbrev-ref "$branch@{upstream}")"
+			has_upstream="$?"
+		fi
+		if [[ has_upstream -eq 0 ]]; then
+			branch_sha="$(git rev-parse --quiet --verify "$branch")" &&
+			upstream_sha="$(git rev-parse --quiet --verify "$upstream")" &&
+			if git merge-base --is-ancestor "$upstream_sha" "$branch_sha"; then
+				abbrev="${upstream%/$branch}"
+				echo "${branch@Q} is already up to date with ${abbrev@Q}."
+				continue
+			fi &&
+			if [[ "$branch" == "$current_branch" ]]; then
+				if [[ -v remote ]]; then
+					git -c advice.diverging=false pull --ff-only --quiet "$remote" "$branch" 2>/dev/null
+				else
+					git -c advice.diverging=false pull --ff-only --quiet 2>/dev/null
+				fi
+			else
+				git fetch . --quiet "$upstream:$branch"
+			fi &&
+			echo "Updated ${branch@Q} -> ${upstream@Q}" ||
+			echo "Cannot fast forward ${branch@Q} to ${upstream@Q}"
+		fi
+	done
+}
+
+git fetch --all &&
+forward &&
+if [[ recursive -ne 0 ]]; then
+	git ls-files -z --stage | grep -zZ '^160000 ' | cut -z -f2 | while IFS= read -r -d '' submodule; do
+		pushd "$submodule" &>/dev/null && {
+			echo "Entering ${submodule@Q}"
+			forward
+			popd &>/dev/null
+		}
+	done
+fi
