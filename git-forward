@@ -76,9 +76,9 @@ for branch in $(git branch --list --format="%(refname:short)"); do
 		fi &&
 		if [[ "$branch" == "$current_branch" ]]; then
 			if [[ -v remote ]]; then
-				git pull --ff-only --quiet "$remote" "$branch"
+				git -c advice.diverging=false pull --ff-only --quiet "$remote" "$branch" 2>/dev/null
 			else
-				git pull --ff-only --quiet
+				git -c advice.diverging=false pull --ff-only --quiet 2>/dev/null
 			fi
 		else
 			git fetch . --quiet "$upstream:$branch"
