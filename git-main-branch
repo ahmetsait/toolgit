@@ -41,8 +41,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ quiet -eq 0 ]]; then
-	result="$(git rev-parse --abbrev-ref origin/HEAD --)"
+	result="$(git rev-parse --abbrev-ref origin/HEAD)"
 else
-	result="$(git rev-parse --verify --quiet --abbrev-ref origin/HEAD --)"
+	result="$(git rev-parse --verify --quiet --abbrev-ref origin/HEAD)"
 fi &&
 echo "${result#origin/}"
