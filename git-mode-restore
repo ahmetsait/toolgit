@@ -207,11 +207,11 @@ class GitIndexEntry:
 	
 	modes: int = 0
 	"""
-	32-bit File modes
-	├─ padding: 16-bit
-	├─ object_type: 4-bit
-	├─ unused: 3-bit
-	└─ permissions: 9-bit
+	32-bit File modes  
+	├─ padding: 16-bit  
+	├─ object_type: 4-bit  
+	├─ unused: 3-bit  
+	└─ permissions: 9-bit  
 	"""
 	
 	@property
@@ -265,11 +265,11 @@ class GitIndexEntry:
 	@property
 	def flags(self) -> int:
 		"""
-		16-bit Flags
-		├─ assume_unchanged: 1-bit
-		├─ extended: 1-bit
-		├─ stage: 2-bit
-		└─ path_length: 12-bit
+		16-bit Flags  
+		├─ assume_unchanged: 1-bit  
+		├─ extended: 1-bit  
+		├─ stage: 2-bit  
+		└─ path_length: 12-bit  
 		"""
 		value = self.assume_unchanged << 15
 		value |= self.extended << 14
@@ -298,11 +298,11 @@ class GitIndexEntry:
 	
 	exflags: int = 0
 	"""
-	16-bit Extended flags
-	├─ reserved: 1-bit
-	├─ skip_worktree: 1-bit
-	├─ intent_to_add: 1-bit
-	└─ unused: 13-bit
+	16-bit Extended flags  
+	├─ reserved: 1-bit  
+	├─ skip_worktree: 1-bit  
+	├─ intent_to_add: 1-bit  
+	└─ unused: 13-bit  
 	"""
 	
 	@property
