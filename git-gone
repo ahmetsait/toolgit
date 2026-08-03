@@ -7,7 +7,9 @@ print_help() {
 	expand -t 4 << EOF
 Usage:
 	$app_name
-		Delete local branches that no longer exist on remote.
+		Delete local branches that no longer exist on remote, along with their
+		linked worktrees. Worktrees with uncommitted changes are skipped with a
+		warning.
 
 Options:
 	-?, --help
@@ -38,6 +40,7 @@ git fetch --all --prune &&
 
 current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
 main_branch="$("${app_dir}/git-main-branch" --quiet)" &&
+main_worktree="$(git worktree list --porcelain | awk '/^worktree / { print substr($0, 10); exit }')" &&
 
 for branch in $(git for-each-ref --format '%(refname) %(upstream:track)' refs/heads | awk '$2 == "[gone]" {sub("refs/heads/", "", $1); print $1}'); do
 	if [[ $branch == $current_branch ]]; then
@@ -46,12 +49,37 @@ for branch in $(git for-each-ref --format '%(refname) %(upstream:track)' refs/he
 				echo "$app_name: [Error] Cannot delete current branch: Working tree has changes." >&2
 				exit 1
 			fi
-			git switch "$main_branch" &&
+			# Detach when the main branch is checked out in another worktree.
+			(git switch "$main_branch" 2> /dev/null || git switch --detach) &&
 			git branch -D "$branch"
 		else
 			echo "$app_name: [Error] Cannot delete main branch ${main_branch@Q}." >&2
 		fi
 	else
+		worktree="$(
+			git worktree list --porcelain |
+				awk -v target="refs/heads/$branch" '
+					/^worktree / { path = substr($0, 10) }
+					/^branch / { if ($2 == target) { print path; exit } }
+				'
+		)"
+		if [[ -n "$worktree" ]]; then
+			if ! status="$(git -C "$worktree" status --porcelain)"; then
+				echo "$app_name: [Warning] Skipping ${branch@Q}: worktree ${worktree@Q} could not be inspected." >&2
+				continue
+			elif [[ -n $status ]]; then
+				echo "$app_name: [Warning] Skipping ${branch@Q}: worktree ${worktree@Q} has uncommitted changes." >&2
+				continue
+			fi
+			if [[ $worktree == "$main_worktree" ]]; then
+				# The primary worktree cannot be removed, so move it off the branch instead.
+				git -C "$worktree" switch "$main_branch"
+			else
+				# `--force` is needed because a plain remove refuses outright when the worktree
+				# contains populated submodules.
+				git worktree remove --force "$worktree"
+			fi
+		fi &&
 		git branch -D "$branch"
 	fi
 done
