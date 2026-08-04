@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -uo pipefail
+
 app_name="$(basename "${BASH_SOURCE[0]}")"
 app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
