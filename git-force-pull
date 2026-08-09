@@ -45,7 +45,8 @@ done
 force_pull() {
 	local branch_full_name="$1"
 	local branch="${branch_full_name#refs/heads/}"
-	local upstream="$(git rev-parse --quiet --verify --abbrev-ref "$branch@{upstream}")"
+	local upstream
+	upstream="$(git rev-parse --quiet --verify --abbrev-ref "$branch@{upstream}")"
 	local has_upstream=$?
 	if [[ has_upstream -eq 0 ]]; then
 		if git merge-base --is-ancestor "$upstream" "$branch"; then
