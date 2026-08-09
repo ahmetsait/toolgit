@@ -5,6 +5,8 @@ set -uo pipefail
 app_name="$(basename "${BASH_SOURCE[0]}")"
 app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
+[[ "$PATH" != "$app_dir:"* ]] && export PATH="$app_dir:$PATH"
+
 print_help() {
 	expand -t 4 << EOF
 Usage:

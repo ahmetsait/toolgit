@@ -5,6 +5,8 @@ set -uo pipefail
 app_name="$(basename "${BASH_SOURCE[0]}")"
 app_dir="$(dirname "${BASH_SOURCE[0]}")"
 
+[[ "$PATH" != "$app_dir:"* ]] && export PATH="$app_dir:$PATH"
+
 print_help() {
 	expand -t 4 << EOF
 Usage:
@@ -59,7 +61,7 @@ rebase_loop () {
 if [[ $# -eq 0 ]]; then
 	rebase_loop
 elif [[ $# -eq 1 ]]; then
-	if ! "${app_dir}/git-is-worktree-clean" -q; then
+	if ! git is-worktree-clean --quiet; then
 		echo "$app_name: [Error] Working tree has changes." >&2 &&
 		return 1
 	fi
