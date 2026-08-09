@@ -72,7 +72,7 @@ current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
 
 git fetch --all &&
 if [[ all -eq 1 ]]; then
-	for branch_full_name in $(git for-each-ref --format='%(refname)' refs/heads); do
+	for branch_full_name in $(git for-each-ref --format='%(refname)' refs/heads/); do
 		force_pull "$branch_full_name"
 	done
 else
