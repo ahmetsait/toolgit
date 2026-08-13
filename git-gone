@@ -11,16 +11,35 @@ print_help() {
 	expand -t 4 << EOF
 Usage:
 	$app_name
-		Delete local branches that no longer exist on remote.
+		Delete local branches that no longer exist on remote, along with their
+		linked worktrees. Worktrees with uncommitted changes are skipped with a
+		warning.
 
 Options:
+	-F, --no-fetch
+		Do not automatically run \`git fetch\`.
+
+	-n, --dry-run
+		Show which branches would be deleted without actually doing it.
+
 	-?, --help
 		Show this help information and exit.
 EOF
 }
 
+no_fetch=0
+dry_run=0
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
+		-F|--no-fetch)
+			no_fetch=1
+			shift
+			;;
+		-n|--dry-run)
+			dry_run=1
+			shift
+			;;
 		-\?|--help)
 			print_help
 			exit 0
@@ -38,24 +57,131 @@ done
 
 git rev-parse --git-dir > /dev/null || exit $?
 
-git fetch --all --prune &&
+delete_branch() {
+	if [[ "$dry_run" -eq 0 ]]; then
+		git branch -D "$@"
+	else
+		for b in "$@"; do
+			echo "Would delete branch ${b@Q} ($(git rev-parse --short "$b"))."
+		done
+	fi
+}
+
+delete_worktree() {
+	local worktree
+	worktree="$1"
+	local refname
+	refname="$(git -C "$worktree" symbolic-ref --quiet HEAD 2>/dev/null)"
+	local is_detached=$?
+	if [[ "$dry_run" -eq 0 ]]; then
+		git worktree remove ${2:-} "$worktree" &&
+		if [[ "$is_detached" -eq 0 ]]; then
+			local branch="${refname#refs/heads/}"
+			echo "Deleted worktree ${1@Q} (branch: ${branch@Q})."
+		else
+			echo "Deleted worktree ${1@Q} ($(git -C "$worktree" rev-parse --short HEAD))."
+		fi
+	else
+		if [[ "$is_detached" -eq 0 ]]; then
+			local branch="${refname#refs/heads/}"
+			echo "Would delete worktree ${1@Q} (branch: ${branch@Q})."
+		elif [[ "$is_detached" -eq 1 ]]; then
+			echo "Would delete worktree ${1@Q} ($(git -C "$worktree" rev-parse --short HEAD))."
+		else
+			echo "Would delete worktree ${1@Q}."
+		fi
+	fi
+}
+
+if [[ "$no_fetch" -eq 0 ]]; then
+	git fetch --all --prune
+fi &&
 
 current_branch="$(git rev-parse --abbrev-ref HEAD)" &&
 main_branch="$(git main-branch --quiet)" &&
-
-for branch in $(git for-each-ref --format '%(refname) %(upstream:track)' refs/heads/ | awk '$2 == "[gone]" {sub("refs/heads/", "", $1); print $1}'); do
-	if [[ $branch == $current_branch ]]; then
-		if [[ $branch != $main_branch ]]; then
-			if ! git is-worktree-clean --quiet; then
-				echo "$app_name: [Error] Cannot delete current branch: Working tree has changes." >&2
-				exit 1
-			fi
-			git switch "$main_branch" &&
-			git branch -D "$branch"
-		else
-			echo "$app_name: [Error] Cannot delete main branch ${main_branch@Q}." >&2
+{
+	declare -A branch2worktree
+	declare -A worktree2locked
+	declare -A worktree2prunable
+	_locked=0
+	_prunable=0
+	while IFS= read -r -s -d '' line; do
+		if [[ -z "$line" ]]; then
+			[[ -v _branch ]] && branch2worktree["$_branch"]="$_worktree"
+			[[ ! -v main_worktree ]] && main_worktree="$_worktree"
+			worktree2locked["$_worktree"]="$_locked"
+			worktree2prunable["$_worktree"]="$_prunable"
+			_locked=0
+			_prunable=0
+			unset _worktree _branch
+		elif [[ "$line" == "worktree "* ]]; then
+			_worktree="${line#* }"
+		elif [[ "$line" == "branch "* ]]; then
+			_branch="${line#* }"
+			_branch="${_branch#refs/heads/}"
+		elif [[ "$line" == "locked" || "$line" == "locked "* ]]; then
+			_locked=1
+		elif [[ "$line" == "prunable" || "$line" == "prunable "* ]]; then
+			_prunable=1
 		fi
-	else
-		git branch -D "$branch"
+	done < <(git worktree list --porcelain -z)
+	unset _locked _prunable
+} &&
+
+for refname in $(git for-each-ref --format '%(if:equals=gone)%(upstream:track,nobracket)%(then)%(refname)%(end)' refs/heads/ | grep .); do
+	branch="${refname#refs/heads/}"
+	
+	if [[ "$branch" == "$main_branch" ]]; then
+		echo "$app_name: [Warning] Skipping main branch ${branch@Q}." >&2
+		continue
 	fi
+	
+	if [[ -v branch2worktree["$branch"] ]]; then
+		worktree="${branch2worktree["$branch"]}"
+		
+		if [[ "${worktree2locked["$worktree"]}" -ne 0 ]]; then
+			echo "$app_name: [Warning] Skipping ${branch@Q} checked out in locked worktree ${worktree@Q}." >&2
+			continue
+		fi
+		
+		if [[ "${worktree2prunable["$worktree"]}" -ne 0 ]]; then
+			delete_worktree "$worktree" &&
+			delete_branch "$branch"
+			continue
+		fi
+		
+		git -C "$worktree" is-worktree-clean --quiet
+		is_worktree_clean=$?
+		if [[ "$is_worktree_clean" -eq 1 ]]; then
+			echo "$app_name: [Warning] Skipping ${branch@Q}: Worktree ${worktree@Q} has uncommitted changes." >&2
+			continue
+		elif [[ "$is_worktree_clean" -ne 0 ]]; then
+			echo "$app_name: [Warning] Skipping ${branch@Q}: Error reading worktree ${worktree@Q} status." >&2
+			continue
+		fi
+		
+		if [[ "$worktree" == "$main_worktree" ]]; then
+			# The primary worktree cannot be removed, so move it off the branch instead.
+			if [[ "$dry_run" -eq 0 ]]; then
+				git -C "$worktree" switch --quiet "$main_branch" 2>/dev/null &&
+				echo "Switched worktree ${worktree@Q} to branch ${main_branch@Q}" ||
+				git -C "$worktree" switch --quiet --detach &&
+				echo "Detached worktree ${worktree@Q}"
+			else
+				echo "Would switch worktree ${worktree@Q}"
+			fi
+		elif [[ . -ef "$worktree" || "$(realpath .)" == "$(realpath "$worktree")"/* ]]; then
+			# Avoid deleting the current working directory.
+			if [[ "$dry_run" -eq 0 ]]; then
+				git -C "$worktree" switch --quiet --detach &&
+				echo "Detached worktree ${worktree@Q}"
+			else
+				echo "Would detach worktree ${worktree@Q}"
+			fi
+		else
+			# `--force` is needed because a plain remove refuses outright when the worktree contains populated submodules.
+			delete_worktree "$worktree" --force
+		fi
+	fi &&
+	delete_branch "$branch"
 done
